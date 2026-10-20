@@ -252,7 +252,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
    - jogador: vê os próprios números, vota e acompanha os rankings */
 const vazio = () => ({ user: null, perfil: null, dev: false, modoDev: false, patrocinio: {},
   peladas: [], todas: [], membrosTodas: [], usuarios: [], global: null,
-  pelada: null, membro: null, membros: [], partidas: [], gols: [], presencas: [], lances: [], medias: [], meusVotos: [] });
+  pelada: null, membro: null, membros: [], partidas: [], gols: [], presencas: [], lances: [], medias: [], meusVotos: [], emails: new Map() });
 const app = vazio();
 const state = { periodo: "mes", stat: "gols", login: "codigo", loginEmail: "", loginPelada: "", partida: null,
   busca: "", filtro: "todas", verTodas: false, novaPelada: false, buscaUsu: "",
@@ -294,7 +294,9 @@ const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
 
 const membroDe = id => app.membros.find(m => m.jogador_id === id);
 const nomeDe = id => { const m = membroDe(id); return m ? (m.jogadores.apelido || m.jogadores.nome) : "Ex-membro"; };
-const avatarDe = id => { const m = membroDe(id); return avatar(m ? m.jogadores.nome : "?", m && m.jogadores.foto_url); };
+const avatarDe = id => { const m = membroDe(id); return avatar(m ? m.jogadores.nome : "?", m && m.jogadores.foto_url, m && m.jogadores.pendente); };
+// perfil criado antes da pessoa ter conta: vira conta quando ela se cadastrar com o e-mail ligado a ele
+const rotuloMembro = m => `${cap(m.tipo)}${m.papel === "presidente" ? " · presidente" : ""}${m.jogadores.pendente ? " · aguardando cadastro" : ""}`;
 const nomeExibido = () => app.perfil.apelido || app.perfil.nome.split(" ")[0] || "Craque";
 const souPresidente = () => app.modoDev || (app.membro && app.membro.papel === "presidente");
 const hora = h => { const m = /^(\d{1,2})[:h](\d{2})?$/.exec((h || "").trim()); return m ? `${Number(m[1])}h${m[2] && m[2] !== "00" ? m[2] : ""}` : h; };
@@ -447,7 +449,7 @@ async function carregarPeladas(){
 async function carregarTodas(){
   const [todas, membros] = (await Promise.all([
     sb.from("peladas").select("*").order("criado_em", { ascending: false }),
-    sb.from("membros").select("pelada_id, tipo, entrou_em")
+    tudo(() => sb.from("membros").select("pelada_id, tipo, entrou_em").order("pelada_id").order("jogador_id"))
   ])).map(ok);
   app.todas = todas;
   app.membrosTodas = membros;
@@ -461,20 +463,32 @@ async function abrirPelada(id){
   route();
 }
 
+// O Supabase devolve no máximo 1000 linhas por consulta: busca em páginas até acabar
+async function tudo(consulta){
+  const linhas = [];
+  for (let de = 0; ; de += 1000) {
+    const r = ok(await consulta().range(de, de + 999));
+    linhas.push(...r);
+    if (r.length < 1000) return { data: linhas, error: null };
+  }
+}
+
 async function carregar(){
   const p = app.pelada.id;
-  const [pelada, codPres, membros, partidas, gols, presencas, lances, medias, meusVotos] = (await Promise.all([
+  const [pelada, codPres, membros, partidas, gols, presencas, lances, medias, meusVotos, pendentes] = (await Promise.all([
     sb.from("peladas").select("*").eq("id", p).single(),
     sb.from("codigos_presidente").select("sufixo").eq("pelada_id", p),   // só dev e presidente recebem
-    sb.from("membros").select("jogador_id, papel, tipo, pote_manual, entrou_em, jogadores(nome, apelido, foto_url)").eq("pelada_id", p),
-    sb.from("partidas").select("id, data").eq("pelada_id", p).order("data"),
-    sb.from("gols").select("id, partida_id, autor_id, assistencia_id").eq("pelada_id", p).order("criado_em"),
-    sb.from("presencas").select("partida_id, jogador_id").eq("pelada_id", p),
-    sb.from("lances").select("id, partida_id, jogador_id, metrica, qtd").eq("pelada_id", p),
+    tudo(() => sb.from("membros").select("jogador_id, papel, tipo, pote_manual, entrou_em, jogadores(nome, apelido, foto_url, pendente)").eq("pelada_id", p)),
+    tudo(() => sb.from("partidas").select("id, data").eq("pelada_id", p).order("data")),
+    tudo(() => sb.from("gols").select("id, partida_id, autor_id, assistencia_id").eq("pelada_id", p).order("criado_em").order("id")),
+    tudo(() => sb.from("presencas").select("partida_id, jogador_id").eq("pelada_id", p).order("partida_id").order("jogador_id")),
+    tudo(() => sb.from("lances").select("id, partida_id, jogador_id, metrica, qtd").eq("pelada_id", p).order("id")),
     sb.rpc("medias", { p }),
-    sb.from("votos").select("partida_id, votado_id, nota").eq("pelada_id", p).eq("votante_id", app.user.id)
+    tudo(() => sb.from("votos").select("partida_id, votado_id, nota").eq("pelada_id", p).eq("votante_id", app.user.id).order("id")),
+    sb.from("perfis_pendentes").select("jogador_id, email")   // só dev e presidente recebem
   ])).map(ok);
   Object.assign(app, { membros, partidas, gols, presencas, lances, medias, meusVotos });
+  app.emails = new Map(pendentes.map(x => [x.jogador_id, x.email]));
   app.pelada = { ...pelada, papel: app.pelada.papel, sufixo: codPres.length ? codPres[0].sufixo : null };
   app.membro = membroDe(app.user.id);
   if (!app.membro && !app.modoDev) {   // foi removido da pelada
@@ -495,7 +509,7 @@ function meusNumeros(){
 
 function rankingDe(periodo){
   const mes = mesAtual();
-  const ids = new Set((periodo === "semana" ? app.partidas.slice(-1)
+  const ids = new Set((periodo === "semana" ? app.partidas.filter(p => p.data > diasAtras(7))
     : periodo === "mes" ? app.partidas.filter(p => p.data.startsWith(mes))
     : app.partidas).map(p => p.id));
   const gols = app.gols.filter(g => ids.has(g.partida_id));
@@ -780,10 +794,10 @@ async function renderRankingsDev(){
   view.innerHTML = `<section class="card fade span2" id="ranking"><div class="empty">Carregando…</div></section>`;
   if (!app.global) await run(async () => {
     const [gols, partidas, jogadores, membros] = (await Promise.all([
-      sb.from("gols").select("partida_id, autor_id, assistencia_id"),
-      sb.from("partidas").select("id, data"),
-      sb.from("jogadores").select("id, nome, apelido, foto_url"),
-      sb.from("membros").select("pelada_id, jogador_id")
+      tudo(() => sb.from("gols").select("partida_id, autor_id, assistencia_id").order("id")),
+      tudo(() => sb.from("partidas").select("id, data").order("id")),
+      tudo(() => sb.from("jogadores").select("id, nome, apelido, foto_url").order("id")),
+      tudo(() => sb.from("membros").select("pelada_id, jogador_id").order("pelada_id").order("jogador_id"))
     ])).map(ok);
     app.global = { gols, partidas, jogadores, membros };
   });
@@ -863,7 +877,7 @@ function renderJogadores(){
           const t = tabela.get(m.jogador_id);
           return `<li>
             ${avatarDe(m.jogador_id)}
-            <div class="who"><b>${esc(nomeDe(m.jogador_id))}${m.jogador_id===id?" · você":""}</b><span>${cap(m.tipo)}${m.papel==="presidente"?" · presidente":""} · ⚽ ${r.gols} · 🎯 ${r.assistencias}</span></div>
+            <div class="who"><b>${esc(nomeDe(m.jogador_id))}${m.jogador_id===id?" · você":""}</b><span>${rotuloMembro(m)} · ⚽ ${r.gols} · 🎯 ${r.assistencias}</span></div>
             <span class="pill soft">${t ? `Pote ${t.pote}` : "–"}</span>
           </li>`;
         }).join("")}
@@ -885,7 +899,7 @@ function renderPelada(){
           const t = tabela.get(m.jogador_id);
           return `<li>
             ${avatarDe(m.jogador_id)}
-            <div class="who"><b>${esc(nomeDe(m.jogador_id))}${m.jogador_id===app.user.id?" · você":""}</b><span>${cap(m.tipo)}${m.papel==="presidente"?" · presidente":""}</span></div>
+            <div class="who"><b>${esc(nomeDe(m.jogador_id))}${m.jogador_id===app.user.id?" · você":""}</b><span>${rotuloMembro(m)}</span></div>
             <span class="pill soft">${t ? `Pote ${t.pote}` : "–"}</span>
           </li>`;
         }).join("")}
@@ -1086,8 +1100,8 @@ function cardPartidas(){
         ${golsDaPartida.length ? `<ul class="list" style="margin-top:6px">
           ${golsDaPartida.map(g => `
             <li>
-              ${avatarDe(g.autor_id)}
-              <div class="who"><b>⚽ ${esc(nomeDe(g.autor_id))}</b><span>${g.assistencia_id ? `🎯 ${esc(nomeDe(g.assistencia_id))}` : "Sem assistência"}</span></div>
+              ${avatarDe(g.autor_id || g.assistencia_id)}
+              <div class="who"><b>${g.autor_id ? `⚽ ${esc(nomeDe(g.autor_id))}` : `🎯 ${esc(nomeDe(g.assistencia_id))}`}</b><span>${!g.autor_id ? "Assistência (autor do gol não registrado)" : g.assistencia_id ? `🎯 ${esc(nomeDe(g.assistencia_id))}` : "Sem assistência"}</span></div>
               <button class="btn ghost sm" data-act="apagarGol" data-id="${g.id}">Remover</button>
             </li>`).join("")}
         </ul>` : ""}
@@ -1120,13 +1134,14 @@ function renderCardJogadores(){
     </div>
     ${state.addJogador ? `
       <form data-form="addJogador" class="box" style="margin:0 0 14px">
-        <label class="field" style="margin-top:0"><span>E-mail de quem já tem conta</span><input class="input" name="email" type="email" required></label>
+        <label class="field" style="margin-top:0"><span>Nome</span><input class="input" name="nome" placeholder="Como a galera chama" required></label>
+        <label class="field"><span>E-mail</span><input class="input" name="email" type="email" placeholder="Opcional: liga o perfil à conta dele"></label>
         <div class="two">
           <label class="field"><span>Tipo</span><select class="input" name="tipo"><option value="mensalista">Mensalista</option><option value="avulso">Avulso</option></select></label>
           <label class="field"><span>Papel</span><select class="input" name="papel"><option value="jogador">Jogador</option><option value="presidente">Presidente</option></select></label>
         </div>
         <button class="btn block" style="margin-top:14px">Adicionar</button>
-        <p class="hint">Quem ainda não tem conta entra sozinho com o código <b class="mono">${esc(app.pelada.codigo_convite)}</b>.</p>
+        <p class="hint">Sem conta ainda? O perfil fica "aguardando cadastro" e é ligado à pessoa quando ela criar a conta com esse e-mail. Ela também pode entrar sozinha com o código <b class="mono">${esc(app.pelada.codigo_convite)}</b>.</p>
       </form>` : ""}
     <label class="search">${LUPA}<input class="input" placeholder="Buscar jogador" value="${esc(state.buscaJog)}" data-input="buscaJog" aria-label="Buscar jogador"></label>
     <div class="seg" style="margin-top:12px">
@@ -1154,11 +1169,16 @@ function renderListaJog(){
         return `
         <li>
           ${avatarDe(m.jogador_id)}
-          <div class="who"><b>${esc(nomeDe(m.jogador_id))}${eu ? " · você" : ""}</b><span>${cap(m.tipo)}${m.papel==="presidente"?" · presidente":""}</span></div>
+          <div class="who"><b>${esc(nomeDe(m.jogador_id))}${eu ? " · você" : ""}</b><span>${rotuloMembro(m)}</span></div>
           <span class="pill soft">${t ? `Pote ${t.pote}` : "–"}</span>
           <a class="lnk" data-act="editJog" data-jogador="${m.jogador_id}">${state.editando === m.jogador_id ? "Fechar" : "Editar"}</a>
         </li>
         ${state.editando === m.jogador_id ? `<li class="edit"><div class="box">
+          ${m.jogadores.pendente ? `<form data-form="emailPendente" data-jogador="${m.jogador_id}" style="margin-bottom:14px">
+            <div class="sub-title" style="margin-top:0">E-mail da conta</div>
+            <div class="row"><input class="input" name="email" type="email" value="${esc(app.emails.get(m.jogador_id) || "")}" placeholder="email@exemplo.com"><button class="btn sm">Salvar</button></div>
+            <p class="hint">Quando a pessoa criar conta com esse e-mail, os números dela vão junto. Se ela já tiver conta, liga na hora.</p>
+          </form>` : ""}
           <div class="sub-title" style="margin-top:0">Tipo</div>
           <div class="seg">${["mensalista","avulso"].map(k => `<button class="${m.tipo===k?"on":""}" data-act="tipo" data-jogador="${m.jogador_id}" data-valor="${k}">${cap(k)}</button>`).join("")}</div>
           ${organizador ? `<div class="setting" style="margin-top:14px">
@@ -1510,9 +1530,15 @@ const FORMS = {
     route();
   }),
   addJogador: (f, d) => run(async () => {
-    ok(await sb.rpc("adicionar_por_email", { p: app.pelada.id, email_: d.get("email").trim(), tipo_: d.get("tipo"), papel_: d.get("papel") }));
+    const r = ok(await sb.rpc("adicionar_jogador", { p: app.pelada.id, nome_: d.get("nome").trim(), email_: d.get("email").trim() || null, tipo_: d.get("tipo"), papel_: d.get("papel") }));
     state.addJogador = false;
-    aviso("Jogador adicionado!");
+    aviso(r === "conta" ? "Jogador adicionado!" : "Perfil criado, aguardando cadastro");
+    await recarregar();
+  }),
+  emailPendente: (f, d) => run(async () => {
+    const r = ok(await sb.rpc("definir_email", { jogador: f.dataset.jogador, email_: d.get("email").trim() }));
+    if (r === "vinculado") { state.editando = null; aviso("Essa pessoa já tinha conta: perfil ligado!"); }
+    else aviso("E-mail salvo. Liga assim que a pessoa criar a conta.");
     await recarregar();
   }),
   novaPartida: (f, d) => run(async () => {
