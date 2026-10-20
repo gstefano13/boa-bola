@@ -561,6 +561,7 @@ function route(){
   }
   document.getElementById("nav").innerHTML = itens.map(([k, rotulo, ico]) =>
     `<a href="#${k}" class="${k === v ? "on" : ""}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${ICONES[ico]}</svg>${rotulo}</a>`).join("");
+  inserirPatrocinio();
   window.scrollTo(0, 0);
 }
 window.addEventListener("hashchange", () => { if (!location.hash.startsWith("#convite=")) route(); });
@@ -637,19 +638,27 @@ function renderEscolher(){
     </section>`;
 }
 
-/* ===================== INÍCIO DO JOGADOR (Slide 01) ===================== */
+/* ===================== PATROCINADOR (todas as abas) ===================== */
 function cardPatrocinio(){
   const p = app.patrocinio || {};
-  if (!p.nome) return "";
   const url = urlSegura(p.url), logo = urlSegura(p.logo);
+  const botao = url ? `<a class="btn sm" href="${esc(url)}" target="_blank" rel="noopener">Ver</a>`
+    : app.modoDev ? `<a class="btn sm" href="#ajustes">${p.nome ? "Editar" : "Configurar"}</a>` : "";
   return `
-    <section class="card sponsor fade" style="animation-delay:.03s">
+    <section class="card sponsor span2 fade" style="animation-delay:.03s">
       <div class="logo">${logo ? `<img src="${esc(logo)}" alt="">` : "LOGO"}</div>
-      <div class="who"><small>Patrocinador oficial</small><b>${esc(p.nome)}</b><span>${esc(p.texto || "")}</span></div>
-      ${url ? `<a class="btn sm" href="${esc(url)}" target="_blank" rel="noopener">Ver</a>` : ""}
+      <div class="who"><small>Patrocinador oficial</small><b>${esc(p.nome || "Sua marca aqui")}</b><span>${esc(p.nome ? p.texto || "" : "Desconto exclusivo na pelada")}</span></div>
+      ${botao}
     </section>`;
 }
 
+// Mesmo lugar do Slide 01 em toda aba: logo abaixo do primeiro card
+function inserirPatrocinio(){
+  if (!app.user || view.querySelector(".sponsor") || !view.firstElementChild) return;
+  view.firstElementChild.insertAdjacentHTML("afterend", cardPatrocinio());
+}
+
+/* ===================== INÍCIO DO JOGADOR (Slide 01) ===================== */
 function renderInicio(){
   const me = meusNumeros();
   const J = app.pelada.janela_semanas;
@@ -660,7 +669,6 @@ function renderInicio(){
 
   view.innerHTML = `
     <section class="hero fade" id="hero"></section>
-    ${cardPatrocinio()}
     <section class="card fade" id="boot" style="animation-delay:.05s"></section>
     <section class="card fade" id="trend" style="animation-delay:.1s"></section>
     <section class="card fade" id="ranking" style="animation-delay:.15s"></section>`;
@@ -1360,6 +1368,7 @@ const ACOES = {
     ok(await sb.from("votos").upsert(voto, { onConflict: "partida_id,votante_id,votado_id" }));
     app.meusVotos = app.meusVotos.filter(v => !(v.partida_id === voto.partida_id && v.votado_id === voto.votado_id)).concat(voto);
     renderJogadores();
+    inserirPatrocinio();
   }),
   apagarGol: el => run(async () => { ok(await sb.from("gols").delete().eq("id", el.dataset.id)); await recarregar(); }),
   apagarLance: el => run(async () => {
@@ -1403,8 +1412,8 @@ const ACOES = {
     aviso("Jogador removido da pelada");
     await recarregar();
   }),
-  novaPelada: () => { state.novaPelada = !state.novaPelada; renderPeladasDev(); },
-  filtro: el => { state.filtro = el.dataset.valor; renderPeladasDev(); },
+  novaPelada: () => { state.novaPelada = !state.novaPelada; renderPeladasDev(); inserirPatrocinio(); },
+  filtro: el => { state.filtro = el.dataset.valor; renderPeladasDev(); inserirPatrocinio(); },
   verTodas: () => { state.verTodas = !state.verTodas; renderListaPeladas(); }
 };
 
@@ -1555,6 +1564,7 @@ const FORMS = {
     ok(await sb.from("config").update({ patrocinio }).eq("id", 1));
     app.patrocinio = patrocinio;
     aviso("Patrocinador salvo");
+    route();
   })
 };
 
