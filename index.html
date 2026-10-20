@@ -422,7 +422,7 @@ async function entrar(user){
       if (id) {
         gravar("pelada", id);
         if (app.dev) gravar("modo", "jogador");
-        aviso("Você entrou na pelada!");
+        aviso(convite.replace(/[^A-Z0-9]/g, "").length === 10 ? "Você entrou como presidente!" : "Você entrou na pelada!");
       } else gravar("modo", "dev");   // código do dev: abre o painel
     }
     await carregarPeladas();
@@ -463,8 +463,9 @@ async function abrirPelada(id){
 
 async function carregar(){
   const p = app.pelada.id;
-  const [pelada, membros, partidas, gols, presencas, lances, medias, meusVotos] = (await Promise.all([
+  const [pelada, codPres, membros, partidas, gols, presencas, lances, medias, meusVotos] = (await Promise.all([
     sb.from("peladas").select("*").eq("id", p).single(),
+    sb.from("codigos_presidente").select("sufixo").eq("pelada_id", p),   // só dev e presidente recebem
     sb.from("membros").select("jogador_id, papel, tipo, pote_manual, entrou_em, jogadores(nome, apelido, foto_url)").eq("pelada_id", p),
     sb.from("partidas").select("id, data").eq("pelada_id", p).order("data"),
     sb.from("gols").select("id, partida_id, autor_id, assistencia_id").eq("pelada_id", p).order("criado_em"),
@@ -474,7 +475,7 @@ async function carregar(){
     sb.from("votos").select("partida_id, votado_id, nota").eq("pelada_id", p).eq("votante_id", app.user.id)
   ])).map(ok);
   Object.assign(app, { membros, partidas, gols, presencas, lances, medias, meusVotos });
-  app.pelada = { ...pelada, papel: app.pelada.papel };
+  app.pelada = { ...pelada, papel: app.pelada.papel, sufixo: codPres.length ? codPres[0].sufixo : null };
   app.membro = membroDe(app.user.id);
   if (!app.membro && !app.modoDev) {   // foi removido da pelada
     app.pelada = null;
@@ -564,7 +565,7 @@ function renderLogin(){
     <form data-form="codigo" style="margin-top:8px">
       <label class="field"><span>E-mail</span><input class="input" name="email" type="email" autocomplete="email" placeholder="seuemail@exemplo.com" value="${esc(state.loginEmail)}" required></label>
       <label class="field"><span>Código da pelada</span>
-        <input class="input mono" name="codigo" placeholder="Ex.: A3F9K2" maxlength="6" minlength="6" pattern="[A-Za-z0-9]{6}" autocomplete="off" value="${esc(ler("convite") || "")}" style="text-transform:uppercase" required>
+        <input class="input mono" name="codigo" placeholder="Ex.: A3F9K2" maxlength="11" minlength="6" pattern="[A-Za-z0-9]{6}(-?[A-Za-z0-9]{4})?" title="6 caracteres (presidente: código-XXXX)" autocomplete="off" value="${esc(ler("convite") || "")}" style="text-transform:uppercase" required>
         <div class="hint">6 caracteres, letras e números</div></label>
       <button class="btn block">Entrar</button>
       <p class="msg" id="loginMsg"></p>
@@ -618,7 +619,7 @@ function renderEscolher(){
     <section class="card fade" style="animation-delay:.05s">
       <div class="eyebrow">Tem um convite?</div><div class="h2">Entrar com código</div>
       <form data-form="entrarCodigo" class="row" style="margin-top:14px">
-        <input class="input mono" name="codigo" placeholder="Ex.: A3F9K2" maxlength="6" autocomplete="off" style="text-transform:uppercase" required>
+        <input class="input mono" name="codigo" placeholder="Ex.: A3F9K2" maxlength="11" autocomplete="off" style="text-transform:uppercase" required>
         <button class="btn">Entrar</button>
       </form>
     </section>`;
@@ -958,7 +959,14 @@ function cardDados(){
           <div class="input code-box"><b class="mono">${esc(p.codigo_convite)}</b>
             <div class="row"><button type="button" class="btn white sm" data-act="copiar">Copiar link</button><button type="button" class="btn white sm" data-act="novoCodigo">Gerar novo</button></div>
           </div>
+          <div class="hint">Para os jogadores.</div>
         </div>
+        ${p.sufixo ? `<div class="field"><span>Código do presidente</span>
+          <div class="input code-box"><b class="mono">${esc(p.codigo_convite)}-${esc(p.sufixo)}</b>
+            <div class="row"><button type="button" class="btn white sm" data-act="copiarPres">Copiar</button><button type="button" class="btn white sm" data-act="novoCodigoPres">Gerar novo</button></div>
+          </div>
+          <div class="hint">Dá acesso pra editar a pelada. Não mande no grupo.</div>
+        </div>` : ""}
         <button class="btn block">Salvar alterações</button>
       </form>
     </section>`;
@@ -1327,6 +1335,15 @@ const ACOES = {
     const t = app.todas.find(p => p.id === app.pelada.id);
     if (t) t.codigo_convite = c;
     aviso(`Novo código: ${c}. O antigo parou de funcionar.`);
+    route();
+  }),
+  copiarPres: () => run(async () => {
+    await navigator.clipboard.writeText(`${app.pelada.codigo_convite}-${app.pelada.sufixo}`);
+    aviso("Código do presidente copiado!");
+  }),
+  novoCodigoPres: () => run(async () => {
+    app.pelada.sufixo = ok(await sb.rpc("novo_codigo_presidente", { p: app.pelada.id }));
+    aviso(`Novo código do presidente: ${app.pelada.codigo_convite}-${app.pelada.sufixo}`);
     route();
   }),
   votar: el => run(async () => {
