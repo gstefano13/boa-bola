@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Boa Bola · Início</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F3F2EE; --card:#FFFFFF; --ink:#0C0C0C; --ink-2:#5E5E5A; --ink-3:#9A9A94;
+  --line:#E6E5DF; --soft:#F7F6F2; --accent:#17A34A; --accent-ink:#0B6B30; --lime:#C9F36B;
+  --r-xl:28px; --r-lg:20px; --r-md:14px;
+  --shadow:0 1px 0 rgba(0,0,0,.03), 0 8px 24px -12px rgba(0,0,0,.08);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{font-family:'Geist',system-ui,sans-serif;background:var(--bg);color:var(--ink);
+  -webkit-font-smoothing:antialiased;letter-spacing:-.01em;padding-bottom:110px}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+.wrap{max-width:1120px;margin:0 auto;padding:16px}
+
+/* top bar */
+.top{display:flex;align-items:center;justify-content:space-between;padding:6px 2px 18px}
+.brand{font-weight:600;font-size:20px;letter-spacing:-.04em;display:flex;align-items:center;gap:8px}
+.brand i{width:22px;height:22px;border-radius:50%;background:var(--ink);display:inline-grid;place-items:center}
+.brand i::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--lime)}
+.me-chip{display:flex;align-items:center;gap:10px;background:var(--card);border-radius:999px;padding:4px 12px 4px 4px;font-size:14px;font-weight:500;box-shadow:var(--shadow)}
+.av{width:32px;height:32px;border-radius:50%;background:#DDE9DF;color:var(--accent-ink);display:grid;place-items:center;font-size:12px;font-weight:600;flex:none;overflow:hidden}
+.av img{width:100%;height:100%;object-fit:cover}
+
+/* grid */
+.grid{display:grid;gap:12px;grid-template-columns:minmax(0,1fr)}
+.grid>*{min-width:0}
+@media(min-width:900px){
+  .grid{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px}
+  .hero{grid-row:span 1}
+  .span2{grid-column:1/-1}
+}
+
+/* cards */
+.card{background:var(--card);border-radius:var(--r-xl);padding:22px;box-shadow:var(--shadow)}
+.eyebrow{font-size:13px;color:var(--ink-2);display:flex;align-items:center;gap:6px}
+.h2{font-size:22px;font-weight:500;letter-spacing:-.03em;margin-top:4px}
+.card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px}
+
+/* hero */
+.hero{background:var(--ink);color:#fff;border-radius:var(--r-xl);padding:24px 22px 20px;position:relative;overflow:hidden;min-height:340px;display:flex;flex-direction:column}
+.hero::before{content:"";position:absolute;inset:auto -30% -55% auto;width:420px;height:420px;border-radius:50%;
+  background:radial-gradient(circle,rgba(23,163,74,.55),rgba(23,163,74,0) 65%);pointer-events:none}
+.hero .eyebrow{color:#A9A9A3}
+.hero .check{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:#D6D6D0}
+.hero h1{font-size:40px;line-height:1.02;font-weight:500;letter-spacing:-.045em;margin:14px 0 6px}
+.hero .sub{color:#B5B5AF;font-size:14px}
+.pote-row{display:flex;align-items:flex-end;gap:14px;margin:auto 0 22px;position:relative}
+.pote-num{font-size:96px;line-height:.82;font-weight:400;letter-spacing:-.06em}
+.pote-label{font-size:13px;color:#A9A9A3;margin:28px 0 10px;position:relative}
+.pote-meta{padding-bottom:6px}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;font-size:12.5px;font-weight:500;padding:5px 10px}
+.pill.lime{background:var(--lime);color:#14200A}
+.pill.ghost{background:rgba(255,255,255,.1);color:#E9E9E4}
+.pote-meta p{font-size:13px;color:#A9A9A3;margin-top:8px}
+.hero-stats{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid rgba(255,255,255,.12);padding-top:14px;position:relative}
+.hero-stats div{padding-right:10px}
+.hero-stats div+div{border-left:1px solid rgba(255,255,255,.12);padding-left:14px}
+.hero-stats b{display:block;font-size:26px;font-weight:500;letter-spacing:-.03em}
+.hero-stats span{font-size:12.5px;color:#9C9C96}
+
+/* chuteira */
+.boot-top{display:flex;align-items:center;gap:14px}
+.boot-ico{width:56px;height:56px;border-radius:18px;display:grid;place-items:center;font-size:30px;flex:none}
+.boot-name{font-size:30px;font-weight:500;letter-spacing:-.04em;line-height:1}
+.boot-goals{font-size:13px;color:var(--ink-2);margin-top:6px}
+.prog{margin:22px 0 8px;height:10px;border-radius:999px;background:var(--soft);overflow:hidden;border:1px solid var(--line)}
+.prog i{display:block;height:100%;border-radius:999px;background:var(--ink)}
+.prog-legend{display:flex;justify-content:space-between;font-size:12.5px;color:var(--ink-2)}
+.prog-legend b{color:var(--ink);font-weight:600}
+.tiers{display:flex;gap:6px;margin-top:18px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.tiers::-webkit-scrollbar{display:none}
+.tier{flex:none;border:1px solid var(--line);border-radius:14px;padding:9px 12px;font-size:12.5px;color:var(--ink-2);background:var(--soft);min-width:92px}
+.tier strong{display:block;color:var(--ink);font-weight:500;font-size:13.5px}
+.tier.on{background:var(--ink);border-color:var(--ink);color:#BDBDB7}
+.tier.on strong{color:#fff}
+.tier.done{opacity:.55}
+@media(min-width:900px){.tiers{flex-wrap:wrap;overflow:visible}.tier{min-width:0;flex:1 1 30%}}
+
+/* chart */
+.chart-wrap{position:relative;margin:4px -6px 0}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.chart .tag{position:absolute;transform:translate(calc(-100% + 14px),-150%);background:var(--ink);color:#fff;font-size:12px;font-weight:500;padding:5px 9px;border-radius:999px;white-space:nowrap}
+.chart-foot{display:flex;gap:18px;margin-top:14px;font-size:13px;color:var(--ink-2)}
+.chart-foot b{display:block;font-size:20px;color:var(--ink);font-weight:500;letter-spacing:-.03em}
+
+/* segmented */
+.seg{display:inline-flex;background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:3px}
+.seg button{padding:7px 12px;border-radius:999px;font-size:13px;color:var(--ink-2);font-weight:500;transition:.2s}
+.seg button.on{background:var(--ink);color:#fff}
+.tabs{display:flex;gap:18px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.tabs button{padding:0 0 10px;font-size:15px;color:var(--ink-3);font-weight:500;position:relative}
+.tabs button.on{color:var(--ink)}
+.tabs button.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--ink);border-radius:2px}
+
+/* ranking list */
+.rank{list-style:none}
+.rank li{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+.rank li:last-child{border-bottom:0}
+.rank .pos{width:22px;font-size:13px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.rank li.top .pos{color:var(--ink);font-weight:600}
+.rank .who{flex:1;min-width:0}
+.rank .who b{display:block;font-weight:500;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rank .who span{font-size:12px;color:var(--ink-3)}
+.rank .val{font-size:22px;font-weight:500;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.rank li.me{background:var(--soft);margin:0 -10px;padding:11px 10px;border-radius:14px;border-bottom-color:transparent}
+.bar-mini{height:4px;border-radius:4px;background:var(--line);margin-top:6px;overflow:hidden}
+.bar-mini i{display:block;height:100%;background:var(--accent)}
+.empty{padding:28px 0;text-align:center;color:var(--ink-3);font-size:14px}
+
+/* bottom nav */
+.nav{position:fixed;left:50%;bottom:calc(14px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:20;
+  display:flex;gap:4px;padding:6px;border-radius:999px;background:rgba(18,18,18,.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 10px 30px -10px rgba(0,0,0,.4)}
+.nav a{display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 14px;border-radius:999px;color:#A3A39D;font-size:11px;text-decoration:none;font-weight:500;min-width:64px}
+.nav a.on{background:#fff;color:var(--ink)}
+.nav svg{width:20px;height:20px}
+
+.fade{animation:fade .5s ease both}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.fade{animation:none}}
+@media(max-width:380px){.hero h1{font-size:34px}.pote-num{font-size:80px}.nav a{min-width:56px;padding:8px 10px}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><i></i>Boa Bola</div>
+    <div class="me-chip" id="meChip"></div>
+  </header>
+
+  <main class="grid">
+    <!-- HERO: meu card -->
+    <section class="hero fade" id="hero"></section>
+
+    <!-- CHUTEIRA -->
+    <section class="card fade" id="boot" style="animation-delay:.05s"></section>
+
+    <!-- EVOLUÇÃO DO POTE -->
+    <section class="card fade" id="trend" style="animation-delay:.1s"></section>
+
+    <!-- RANKINGS -->
+    <section class="card fade" id="ranking" style="animation-delay:.15s"></section>
+  </main>
+</div>
+
+<nav class="nav" aria-label="Navegação">
+  <a href="#" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Início</a>
+  <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M21.5 20a6.5 6.5 0 0 0-4-6"/></svg>Jogadores</a>
+  <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Rankings</a>
+  <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Pelada</a>
+</nav>
+
+<script>
+/* =========================================================
+   DADOS — tudo que a página mostra vem daqui.
+   Valores de EXEMPLO. Depois trocamos pelos dados reais.
+   ========================================================= */
+const DATA = {
+  me: {
+    nome: "Gustavo Stefano",
+    apelido: "Guga",
+    foto: "",                 // URL da foto (vazio = iniciais)
+    tipo: "Mensalista",       // Mensalista | Avulso
+    gols: 18,
+    assistencias: 11,
+    jogos: 24,
+    // média dos votos por semana (1 a 6; 6 = Pote 1). Pote atual = últimas 4 semanas
+    votosPorSemana: [
+      { semana: "2026-08-25", media: 3.9 },
+      { semana: "2026-09-01", media: 4.1 },
+      { semana: "2026-09-08", media: 4.0 },
+      { semana: "2026-09-15", media: 4.4 },
+      { semana: "2026-09-22", media: 4.3 },
+      { semana: "2026-09-29", media: 4.6 },
+      { semana: "2026-10-06", media: 4.5 },
+      { semana: "2026-10-13", media: 4.8 }
+    ]
+  },
+  // ranking por período: gols e assistências
+  ranking: {
+    semana: [
+      { nome: "Angelim", tipo: "Mensalista", gols: 4, assistencias: 2 },
+      { nome: "Athirson", tipo: "Mensalista", gols: 3, assistencias: 3 },
+      { nome: "Guga", tipo: "Mensalista", gols: 2, assistencias: 1, me: true },
+      { nome: "Th", tipo: "Mensalista", gols: 2, assistencias: 0 },
+      { nome: "Pedrão", tipo: "Avulso", gols: 1, assistencias: 2 }
+    ],
+    mes: [
+      { nome: "Angelim", tipo: "Mensalista", gols: 11, assistencias: 6 },
+      { nome: "Athirson", tipo: "Mensalista", gols: 9, assistencias: 8 },
+      { nome: "Henrique", tipo: "Mensalista", gols: 7, assistencias: 5 },
+      { nome: "Guga", tipo: "Mensalista", gols: 6, assistencias: 4, me: true },
+      { nome: "Fabio Jr", tipo: "Avulso", gols: 5, assistencias: 2 },
+      { nome: "Th", tipo: "Mensalista", gols: 4, assistencias: 1 }
+    ],
+    geral: [
+      { nome: "Angelim", tipo: "Mensalista", gols: 52, assistencias: 34 },
+      { nome: "Athirson", tipo: "Mensalista", gols: 39, assistencias: 35 },
+      { nome: "Guga", tipo: "Mensalista", gols: 18, assistencias: 11, me: true },
+      { nome: "Fabio Jr", tipo: "Avulso", gols: 7, assistencias: 3 },
+      { nome: "Th", tipo: "Mensalista", gols: 6, assistencias: 2 },
+      { nome: "Pedrão", tipo: "Avulso", gols: 4, assistencias: 4 }
+    ]
+  }
+};
+
+/* ===================== REGRAS ===================== */
+const CHUTEIRAS = [
+  { nome: "Plástico", min: 0,   cor: "#F6DCDC", emoji: "👟", filtro: "grayscale(1) sepia(1) saturate(3) hue-rotate(300deg)" },
+  { nome: "Ferro",    min: 10,  cor: "#E7E7E4", emoji: "👟", filtro: "grayscale(1)" },
+  { nome: "Bronze",   min: 25,  cor: "#F5E2CF", emoji: "👟", filtro: "sepia(1) saturate(2) hue-rotate(10deg)" },
+  { nome: "Prata",    min: 50,  cor: "#E9ECEF", emoji: "👟", filtro: "grayscale(1) brightness(1.6)" },
+  { nome: "Ouro",     min: 75,  cor: "#F8EDC4", emoji: "👟", filtro: "sepia(1) saturate(4) hue-rotate(5deg) brightness(1.15)" },
+  { nome: "Diamante", min: 125, cor: "#D6F3F7", emoji: "👟", filtro: "sepia(1) saturate(5) hue-rotate(170deg) brightness(1.3)" }
+];
+const poteDe = m => Math.min(Math.max(7 - Math.round(m), 1), 6);   // média 1-6 → pote 1-6
+const chuteiraDe = g => [...CHUTEIRAS].reverse().find(c => g >= c.min);
+const iniciais = n => n.split(" ").filter(Boolean).slice(0,2).map(p => p[0]).join("").toUpperCase();
+const avatar = (nome, foto) => `<span class="av">${foto ? `<img src="${foto}" alt="">` : iniciais(nome)}</span>`;
+const fmt = n => n.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const dataCurta = s => { const [y,m,d] = s.split("-"); return `${d}/${m}`; };
+
+/* ===================== RENDER ===================== */
+const me = DATA.me;
+const nomeExibido = me.apelido || me.nome.split(" ")[0];
+const ultimas4 = me.votosPorSemana.slice(-4);
+const mediaAtual = ultimas4.reduce((s, w) => s + w.media, 0) / ultimas4.length;
+const anteriores4 = me.votosPorSemana.slice(-8, -4);
+const mediaAnterior = anteriores4.length ? anteriores4.reduce((s, w) => s + w.media, 0) / anteriores4.length : mediaAtual;
+const poteAtual = poteDe(mediaAtual);
+const poteAnterior = poteDe(mediaAnterior);
+
+document.getElementById("meChip").innerHTML = `${avatar(me.nome, me.foto)}${nomeExibido}`;
+
+// HERO
+const variacao = poteAnterior - poteAtual; // positivo = subiu de pote
+document.getElementById("hero").innerHTML = `
+  <span class="check">✓ ${me.tipo}</span>
+  <h1>Olá, ${nomeExibido}</h1>
+  <p class="sub">Seu resumo na pelada de segunda.</p>
+  <div style="margin-top:auto"></div>
+  <div class="pote-label">Seu pote</div>
+  <div class="pote-row" style="margin-top:0">
+    <div class="pote-num">${poteAtual}</div>
+    <div class="pote-meta">
+      ${variacao > 0 ? `<span class="pill lime">↑ Subiu ${variacao} pote${variacao>1?"s":""}</span>`
+        : variacao < 0 ? `<span class="pill ghost">↓ Caiu ${-variacao} pote${-variacao>1?"s":""}</span>`
+        : `<span class="pill ghost">= Mesmo pote</span>`}
+      <p>Média ${fmt(mediaAtual)} · últimas 4 semanas</p>
+    </div>
+  </div>
+  <div class="hero-stats">
+    <div><b>${me.gols}</b><span>Gols</span></div>
+    <div><b>${me.assistencias}</b><span>Assistências</span></div>
+    <div><b>${me.jogos}</b><span>Jogos</span></div>
+  </div>`;
+
+// CHUTEIRA
+(function(){
+  const atual = chuteiraDe(me.gols);
+  const idx = CHUTEIRAS.indexOf(atual);
+  const prox = CHUTEIRAS[idx + 1];
+  const pct = prox ? ((me.gols - atual.min) / (prox.min - atual.min)) * 100 : 100;
+  document.getElementById("boot").innerHTML = `
+    <div class="card-head">
+      <div><div class="eyebrow">Sua chuteira</div></div>
+      <span class="pill" style="background:var(--soft);border:1px solid var(--line)">Nível ${idx+1} de ${CHUTEIRAS.length}</span>
+    </div>
+    <div class="boot-top">
+      <div class="boot-ico" style="background:${atual.cor}"><span style="filter:${atual.filtro}">${atual.emoji}</span></div>
+      <div>
+        <div class="boot-name">${atual.nome}</div>
+        <div class="boot-goals">${me.gols} gols marcados</div>
+      </div>
+    </div>
+    <div class="prog"><i style="width:${pct}%"></i></div>
+    <div class="prog-legend">
+      <span>${atual.nome} · ${atual.min}</span>
+      ${prox ? `<span>Faltam <b>${prox.min - me.gols} gols</b> para ${prox.nome}</span>` : `<span><b>Nível máximo</b></span>`}
+    </div>
+    <div class="tiers">
+      ${CHUTEIRAS.map((c,i) => {
+        const nx = CHUTEIRAS[i+1];
+        const faixa = nx ? `${c.min}–${nx.min-1} gols` : `${c.min}+ gols`;
+        return `<div class="tier ${i===idx?"on":i<idx?"done":""}"><strong>${c.nome}</strong>${faixa}</div>`;
+      }).join("")}
+    </div>`;
+})();
+
+// EVOLUÇÃO DO POTE (gráfico)
+(function(){
+  const pts = me.votosPorSemana;
+  const W = window.innerWidth < 600 ? 360 : 520, H = window.innerWidth < 600 ? 200 : 220, padL = 34, padR = 16, padT = 26, padB = 30;
+  const x = i => padL + (i * (W - padL - padR)) / (pts.length - 1);
+  const y = m => padT + ((6 - m) / 5) * (H - padT - padB);   // 6 em cima (pote 1)
+  const path = pts.map((p,i) => `${i?"L":"M"}${x(i).toFixed(1)},${y(p.media).toFixed(1)}`).join(" ");
+  const area = `${path} L${x(pts.length-1)},${H-padB} L${x(0)},${H-padB} Z`;
+  const janelaX = x(pts.length - 4);
+  const grid = [1,2,3,4,5,6].map(pote => {
+    const yy = y(7 - pote);
+    return `<line x1="${padL}" x2="${W-padR}" y1="${yy}" y2="${yy}" stroke="#ECEBE5" />
+            <text x="${padL-10}" y="${yy+4}" text-anchor="end" font-size="11" fill="#9A9A94">P${pote}</text>`;
+  }).join("");
+  const last = pts[pts.length-1];
+  const lx = x(pts.length-1), ly = y(last.media);
+  const melhor = Math.max(...pts.map(p => p.media));
+
+  document.getElementById("trend").innerHTML = `
+    <div class="card-head">
+      <div><div class="eyebrow">Evolução do pote</div><div class="h2">Pote ${poteAtual} nas últimas 4 semanas</div></div>
+    </div>
+    <div class="chart-wrap chart">
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Média de votos por semana">
+        <defs>
+          <linearGradient id="g" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#17A34A" stop-opacity=".18"/><stop offset="1" stop-color="#17A34A" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <rect x="${janelaX}" y="${padT-10}" width="${W-padR-janelaX}" height="${H-padB-padT+10}" rx="12" fill="#F4F9F0"/>
+        <text x="${(janelaX + W - padR)/2}" y="${padT-14}" text-anchor="middle" font-size="11" fill="#5E8F48">conta pro pote</text>
+        ${grid}
+        <path d="${area}" fill="url(#g)"/>
+        <path d="${path}" fill="none" stroke="#0C0C0C" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+        ${pts.map((p,i) => `<circle cx="${x(i)}" cy="${y(p.media)}" r="${i===pts.length-1?6:3.5}" fill="${i===pts.length-1?"#C9F36B":"#fff"}" stroke="#0C0C0C" stroke-width="${i===pts.length-1?2:1.5}"><title>${dataCurta(p.semana)} · média ${fmt(p.media)}</title></circle>`).join("")}
+        ${pts.map((p,i) => (i % 2 === pts.length % 2 || i === pts.length-1) ? `<text x="${x(i)}" y="${H-8}" text-anchor="middle" font-size="11" fill="#9A9A94">${dataCurta(p.semana)}</text>` : "").join("")}
+      </svg>
+      <span class="tag" style="left:${(lx/W*100).toFixed(2)}%;top:${(ly/H*100).toFixed(2)}%">${fmt(last.media)} esta semana</span>
+    </div>
+    <div class="chart-foot">
+      <div><b>${fmt(mediaAtual)}</b>Média atual</div>
+      <div><b>${fmt(melhor)}</b>Melhor semana</div>
+      <div><b>${pts.length}</b>Semanas votadas</div>
+    </div>`;
+})();
+
+// RANKINGS
+const state = { periodo: "mes", stat: "gols" };
+function renderRanking(){
+  const lista = [...DATA.ranking[state.periodo]]
+    .filter(p => p[state.stat] > 0)
+    .sort((a,b) => b[state.stat] - a[state.stat] || a.nome.localeCompare(b.nome, "pt-BR"));
+  const max = lista.length ? lista[0][state.stat] : 1;
+  const per = { semana: "Semana", mes: "Mês", geral: "Geral" };
+  document.getElementById("ranking").innerHTML = `
+    <div class="card-head" style="flex-wrap:wrap">
+      <div><div class="eyebrow">Rankings</div><div class="h2">Artilheiros e garçons</div></div>
+      <div class="seg" role="tablist">
+        ${Object.entries(per).map(([k,v]) => `<button class="${state.periodo===k?"on":""}" data-p="${k}">${v}</button>`).join("")}
+      </div>
+    </div>
+    <div class="tabs">
+      <button class="${state.stat==="gols"?"on":""}" data-s="gols">⚽ Gols</button>
+      <button class="${state.stat==="assistencias"?"on":""}" data-s="assistencias">🎯 Assistências</button>
+    </div>
+    ${lista.length ? `<ol class="rank">
+      ${lista.slice(0,5).map((p,i) => `
+        <li class="${i<3?"top":""} ${p.me?"me":""}">
+          <span class="pos">${i+1}</span>
+          ${avatar(p.nome, p.foto)}
+          <div class="who"><b>${p.nome}${p.me?" · você":""}</b><span>${p.tipo}</span>
+            <div class="bar-mini"><i style="width:${(p[state.stat]/max*100).toFixed(0)}%"></i></div></div>
+          <span class="val">${p[state.stat]}</span>
+        </li>`).join("")}
+    </ol>` : `<div class="empty">Nenhum registro nesse período.</div>`}`;
+  document.querySelectorAll("#ranking [data-p]").forEach(b => b.onclick = () => { state.periodo = b.dataset.p; renderRanking(); });
+  document.querySelectorAll("#ranking [data-s]").forEach(b => b.onclick = () => { state.stat = b.dataset.s; renderRanking(); });
+}
+renderRanking();
+</script>
+</body>
+</html>
