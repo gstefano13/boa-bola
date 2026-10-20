@@ -418,17 +418,15 @@ async function entrar(user){
     app.dev = devs.length > 0;
     app.patrocinio = (config && config.patrocinio) || {};
     const convite = ler("convite");
-    if (convite) {
-      gravar("convite", null);
+    gravar("convite", null);
+    // o dev não entra em pelada por código: ele vê todas pelo painel, sem virar jogador
+    if (convite && !app.dev) {
       const id = ok(await sb.rpc("entrar_na_pelada", { codigo: convite }));
-      if (id) {
-        gravar("pelada", id);
-        if (app.dev) gravar("modo", "jogador");
-        aviso(convite.replace(/[^A-Z0-9]/g, "").length === 10 ? "Você entrou como presidente!" : "Você entrou na pelada!");
-      } else gravar("modo", "dev");   // código do dev: abre o painel
+      gravar("pelada", id);
+      aviso(convite.replace(/[^A-Z0-9]/g, "").length === 10 ? "Você entrou como presidente!" : "Você entrou na pelada!");
     }
     await carregarPeladas();
-    app.modoDev = app.dev && ler("modo") !== "jogador";
+    app.modoDev = app.dev;   // dev sempre abre no painel de developer
     if (app.modoDev) {
       await carregarTodas();
       if (!NAV_DEV.some(n => n[0] === location.hash.slice(1))) location.hash = "peladas";
@@ -1315,16 +1313,8 @@ function renderAjustes(){
       </form>
     </section>
     <section class="card fade" style="animation-delay:.05s">
-      <div class="eyebrow">Modo jogador</div><div class="h2">Suas peladas</div>
-      <p class="note">Veja o app como os jogadores veem, nas peladas em que você joga.</p>
-      ${app.peladas.length ? `<ul class="list" style="margin-top:8px">
-        ${app.peladas.map(x => `
-          <li class="click" data-act="modoJogador" data-id="${x.id}">
-            ${avatar(x.nome)}
-            <div class="who"><b>${esc(x.nome)}</b><span>${x.papel === "presidente" ? "Presidente" : "Jogador"}</span></div>
-            <span class="pill soft">Abrir</span>
-          </li>`).join("")}
-      </ul>` : `<div class="empty">Você ainda não joga em nenhuma pelada.<br>Adicione-se pelo elenco de uma pelada.</div>`}
+      <div class="eyebrow">Conta</div><div class="h2">${esc(app.perfil.nome)}</div>
+      <p class="note">Acesso de developer: você vê e altera todas as peladas, sem aparecer no elenco de nenhuma.</p>
       <button class="btn ghost sm" data-act="sair" style="margin-top:12px">Sair da conta</button>
     </section>`;
 }
@@ -1345,9 +1335,8 @@ const ACOES = {
   abrir: el => run(() => abrirPelada(el.dataset.id)),
   abrirDev: el => run(async () => { location.hash = "pelada"; await abrirPelada(el.dataset.id); }),
   trocar: () => run(async () => { app.pelada = null; gravar("pelada", null); await carregarPeladas(); route(); }),
-  painel: () => run(async () => { app.modoDev = true; gravar("modo", "dev"); app.pelada = null; await carregarTodas(); location.hash = "peladas"; route(); }),
-  modoJogador: el => run(async () => { app.modoDev = false; gravar("modo", "jogador"); location.hash = "inicio"; await abrirPelada(el.dataset.id); }),
-  sair: () => run(async () => { gravar("modo", null); ok(await sb.auth.signOut()); }),
+  painel: () => run(async () => { app.modoDev = true; app.pelada = null; await carregarTodas(); location.hash = "peladas"; route(); }),
+  sair: () => run(async () => { ok(await sb.auth.signOut()); }),
   copiar: () => run(async () => { await navigator.clipboard.writeText(linkConvite()); aviso("Link de convite copiado!"); }),
   novoCodigo: () => run(async () => {
     const c = ok(await sb.rpc("novo_codigo", { p: app.pelada.id }));
