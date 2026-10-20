@@ -598,10 +598,12 @@ function route(manterScroll){
   if (!app.user) renderLogin();
   else if (app.modoDev) {
     const views = { peladas: renderPeladasDev, pelada: app.pelada ? renderPelada : renderPeladasDev, usuarios: renderUsuarios, rankings: renderRankingsDev, ajustes: renderAjustes };
+    // dev vê o Cartola da pelada aberta em modo organizador (sem time próprio)
+    if (app.pelada) Object.assign(views, { cartola: renderCartola, mercado: renderMercado, pontuacao: renderPontuacao, regras: renderRegras });
     v = views[location.hash.slice(1)] ? location.hash.slice(1) : "peladas";
     itens = NAV_DEV;
     views[v]();
-    if (v === "pelada") v = "peladas";
+    if (["pelada", "cartola", "mercado", "pontuacao", "regras"].includes(v)) v = "peladas";
   } else if (!app.pelada) renderEscolher();
   else {
     const views = { inicio: renderInicio, jogadores: renderJogadores, rankings: renderRankings, pelada: renderPelada };
@@ -998,14 +1000,45 @@ function heroCartola({ status, titulo, sub, rotulo, numero, pill, pillLime = tru
       <div class="hero-stats">${stats.map(([b, s]) => `<div><b>${b}</b><span>${s}</span></div>`).join("")}</div>
     </section>`;
 }
-const subnavCartola = ativo => `<nav class="subnav span2 fade">${[["cartola", "Meu time"], ["mercado", "Mercado"], ["pontuacao", "Pontuação"], ["regras", "Regras"]]
+const subnavCartola = ativo => `<nav class="subnav span2 fade">${[["cartola", cart().meuTime ? "Meu time" : "Visão geral"], ["mercado", "Mercado"], ["pontuacao", "Pontuação"], ["regras", "Regras"]]
   .map(([k, v]) => `<a href="#${k}" class="${k === ativo ? "on" : ""}">${v}</a>`).join("")}</nav>`;
-const avisoSemTime = () => `<section class="card fade"><div class="empty">Só quem joga na pelada monta time no Cartola.</div></section>`;
+
+/* ---------- Visão geral do organizador (dev, sem time próprio) ---------- */
+function renderCartolaGeral(){
+  const r = rodadaAberta();
+  const tabela = liga();
+  const escalaram = r ? new Set(cart().escalacoes.filter(e => e.rodada_id === r.id).map(e => e.jogador_id)) : new Set();
+  const atletas = app.membros.filter(m => m.posicao).length;
+  view.innerHTML = `
+    ${heroCartola({
+      status: statusRodada(), titulo: "Cartola da pelada", sub: textoMercado(), rotulo: "Times na liga",
+      numero: tabela.length, pill: r ? plural(escalaram.size, "time escalado", "times escalados") : "Nenhuma rodada aberta", pillLime: !!r,
+      meta: "Visão do organizador: todos os times",
+      stats: [[encerradas().length, "Rodadas jogadas"], [atletas, "No mercado"], [app.membros.length - atletas, "Sem posição"]]
+    })}
+    ${subnavCartola("cartola")}
+    ${souPresidente() ? cardCartolaAdmin() : ""}
+    <section class="card fade" style="animation-delay:.08s">
+      <div class="eyebrow">Liga ${esc(app.pelada.nome)}</div><div class="h2">Times</div>
+      ${tabela.length ? `<ul class="rank" style="margin-top:10px">
+        ${tabela.map((x, i) => {
+          const escalados = r ? escalacaoDe(r.id, x.jogador_id) : [];
+          const valor = Number(x.saldo) + escalados.reduce((s, e) => s + precoDe(e.atleta_id), 0);
+          return `
+          <li class="${i < 3 ? "top" : ""}">
+            <span class="pos">${i + 1}</span>
+            <div class="who"><b>${esc(x.nome)}</b><span>${esc(nomeDe(x.jogador_id))} · ${escalados.length}/7 escalados · patrimônio C$ ${cs(valor)}</span></div>
+            <span class="val">${pts(x.total)}</span>
+          </li>`;
+        }).join("")}
+      </ul>` : `<div class="empty">Nenhum time ainda.<br>Cada time é criado quando o jogador abre a aba Cartola.</div>`}
+    </section>`;
+}
 
 /* ---------- Meu time (Slide 08) ---------- */
 function renderCartola(){
   view.className = "grid solo wide";
-  if (!cart().meuTime) { view.innerHTML = avisoSemTime(); return; }
+  if (!cart().meuTime) return renderCartolaGeral();
   const r = rodadaAberta(), t = cart().meuTime, aberto = mercadoAberto();
   const escalados = meuEscalado();
   const custo = escalados.reduce((s, e) => s + precoDe(e.atleta_id), 0);
@@ -1068,18 +1101,23 @@ function renderCartola(){
 /* ---------- Mercado (Slide 09) ---------- */
 function renderMercado(){
   view.className = "grid solo wide";
-  if (!cart().meuTime) { view.innerHTML = avisoSemTime(); return; }
   const r = rodadaAberta(), t = cart().meuTime;
   const escalados = meuEscalado();
   const custo = escalados.reduce((s, e) => s + precoDe(e.atleta_id), 0);
-  const saldo = Number(t.saldo);
+  const saldo = t ? Number(t.saldo) : 0;
   const atletas = app.membros.filter(m => m.posicao);
   const semPosicao = app.membros.length - atletas.length;
+  const precos = atletas.map(m => Number(m.preco));
   view.innerHTML = `
-    ${heroCartola({
+    ${t ? heroCartola({
       status: statusRodada(), titulo: "Mercado", sub: textoMercado(), rotulo: "Saldo (C$)",
       numero: cs(saldo), pill: `${escalados.length} de 7 escalados`, meta: faltamNoTime(escalados),
       stats: [[pts(custo), "Custo do time"], [pts(saldo + custo), "Patrimônio"], [atletas.length, "Jogadores"]]
+    }) : heroCartola({
+      status: statusRodada(), titulo: "Mercado", sub: textoMercado(), rotulo: "Jogadores no mercado",
+      numero: atletas.length, pill: "Só visualização", pillLime: false, meta: "Developer não monta time",
+      stats: [[precos.length ? pts(precos.reduce((s, x) => s + x, 0) / precos.length) : "–", "Preço médio"],
+              [precos.length ? pts(Math.max(...precos)) : "–", "Mais caro"], [semPosicao, "Sem posição"]]
     })}
     ${subnavCartola("mercado")}
     <section class="card fade span2" style="animation-delay:.05s">
@@ -1103,7 +1141,8 @@ function renderMercado(){
 function renderListaMerc(){
   const el = document.getElementById("listaMerc");
   if (!el) return;
-  const aberto = mercadoAberto(), saldo = Number(cart().meuTime.saldo);
+  const temTime = !!cart().meuTime;
+  const aberto = mercadoAberto(), saldo = temTime ? Number(cart().meuTime.saldo) : 0;
   const escalados = meuEscalado();
   const busca = state.mercBusca.trim().toLowerCase();
   const ordem = { media: (a, b) => b.media - a.media, ultima: (a, b) => b.ultima - a.ultima, caro: (a, b) => b.preco - a.preco, barato: (a, b) => a.preco - b.preco }[state.mercOrdem];
@@ -1123,7 +1162,7 @@ function renderListaMerc(){
           ${avatarDe(x.m.jogador_id)}
           <div class="who"><b>${esc(nomeDe(x.m.jogador_id))}<span class="pos-tag">${x.m.posicao}</span></b><span>Méd. ${pts(x.media)} · Últ. ${pts(x.ultima)}</span></div>
           <div class="preco"><b>C$ ${cs(x.preco)}</b>${x.variacao ? `<small class="${x.variacao > 0 ? "sobe" : "desce"}">${x.variacao > 0 ? "↑" : "↓"} ${cs(Math.abs(x.variacao))}</small>` : ""}</div>
-          <button class="btn sm ${x.meu ? "ghost" : ""}" data-act="${x.meu ? "cartVender" : "cartComprar"}" data-id="${x.m.jogador_id}" ${pode ? "" : "disabled"}>${x.meu ? "Vender" : "Comprar"}</button>
+          ${temTime ? `<button class="btn sm ${x.meu ? "ghost" : ""}" data-act="${x.meu ? "cartVender" : "cartComprar"}" data-id="${x.m.jogador_id}" ${pode ? "" : "disabled"}>${x.meu ? "Vender" : "Comprar"}</button>` : ""}
         </li>`;
       }).join("")}
     </ul>` : `<div class="empty">Nenhum jogador encontrado.</div>`}
@@ -1134,15 +1173,17 @@ function renderListaMerc(){
 /* ---------- Pontuação (Slide 10) ---------- */
 function renderPontuacao(){
   view.className = "grid solo wide";
-  if (!cart().meuTime) { view.innerHTML = avisoSemTime(); return; }
   const enc = encerradas();
   if (!enc.length) {
     view.innerHTML = `
-      ${heroCartola({ status: statusRodada(), titulo: "Pontuação", sub: "Os pontos aparecem quando o organizador encerrar a primeira rodada.", rotulo: "Pontos do seu time", numero: "–", meta: "", stats: [["–", "Na liga"], ["–", "C$ valorizou"], ["–", "Capitão"]] })}
+      ${heroCartola({ status: statusRodada(), titulo: "Pontuação", sub: "Os pontos aparecem quando o organizador encerrar a primeira rodada.",
+        rotulo: cart().meuTime ? "Pontos do seu time" : "Média da liga", numero: "–", meta: "",
+        stats: cart().meuTime ? [["–", "Na liga"], ["–", "C$ valorizou"], ["–", "Capitão"]] : [["–", "Jogaram"], ["–", "Maior pontuação"], ["–", "Scouts lançados"]] })}
       ${subnavCartola("pontuacao")}
       <section class="card fade span2"><div class="empty">Nenhuma rodada encerrada ainda.</div></section>`;
     return;
   }
+  if (!cart().meuTime) return renderPontuacaoGeral(enc);
   if (!enc.some(x => x.id === state.pontRodada)) state.pontRodada = enc[enc.length - 1].id;
   const rod = enc.find(x => x.id === state.pontRodada);
   const total = pontosDoTime(rod.id) || 0;
@@ -1157,7 +1198,6 @@ function renderPontuacao(){
     return { e, valor: base * (e.capitao ? CAPITAO : 1), scouts };
   });
   const cap = linhas.find(l => l.e.capitao);
-  const tabela = liga();
   const pos = minhaPosicaoLiga();
   view.innerHTML = `
     ${heroCartola({
@@ -1186,6 +1226,12 @@ function renderPontuacao(){
       <div class="foot"><span>Total com capitão ×1,5</span><b style="font-size:18px;font-weight:500;color:var(--ink)">${pts(total)} pts</b></div>`
       : `<div class="empty">Você não escalou time nessa rodada.</div>`}
     </section>
+    ${cardClassificacao(rod)}`;
+}
+
+function cardClassificacao(rod){
+  const tabela = liga();
+  return `
     <section class="card fade" style="animation-delay:.1s">
       <div class="eyebrow">Liga ${esc(app.pelada.nome)}</div><div class="h2">Classificação</div>
       ${tabela.length ? `<ul class="rank" style="margin-top:10px">
@@ -1197,6 +1243,48 @@ function renderPontuacao(){
           </li>`).join("")}
       </ul>` : `<div class="empty">Nenhum time na liga ainda.</div>`}
     </section>`;
+}
+
+// developer: pontos de todos os jogadores da rodada, sem time próprio
+function renderPontuacaoGeral(enc){
+  if (!enc.some(x => x.id === state.pontRodada)) state.pontRodada = enc[enc.length - 1].id;
+  const rod = enc.find(x => x.id === state.pontRodada);
+  const daRodada = cart().pontosTime.filter(x => x.rodada_id === rod.id).map(x => Number(x.pontos));
+  const media = daRodada.length ? daRodada.reduce((s, x) => s + x, 0) / daRodada.length : 0;
+  const jogaram = cart().resultados.filter(x => x.rodada_id === rod.id && x.jogou).sort((a, b) => b.pontos - a.pontos);
+  const scouts = cart().scouts.filter(s => s.rodada_id === rod.id);
+  view.innerHTML = `
+    ${heroCartola({
+      status: `Rodada ${rod.numero} · Encerrada`, titulo: "Pontuação",
+      sub: `Scouts lançados pelo organizador em ${dataBr(rod.encerrada_em || rod.fecha_em)}`, rotulo: "Média da liga",
+      numero: pts(media), pill: daRodada.length ? `Melhor time: ${pts(Math.max(...daRodada))}` : "Nenhum time pontuou", pillLime: daRodada.length > 0,
+      meta: plural(daRodada.length, "time pontuou", "times pontuaram"),
+      stats: [[jogaram.length, "Jogaram"], [jogaram.length ? pts(jogaram[0].pontos) : "–", "Maior pontuação"], [scouts.reduce((s, x) => s + x.qtd, 0), "Scouts lançados"]]
+    })}
+    ${subnavCartola("pontuacao")}
+    <section class="card fade" style="animation-delay:.05s">
+      <div class="card-head" style="margin-bottom:10px">
+        <div><div class="eyebrow">Todos os jogadores</div><div class="h2">Pontos por jogador</div></div>
+        <select class="select-pill" data-change="pontRodada" aria-label="Rodada">
+          ${[...enc].reverse().map(x => `<option value="${x.id}" ${x.id === rod.id ? "selected" : ""}>Rodada ${x.numero}</option>`).join("")}
+        </select>
+      </div>
+      ${jogaram.length ? `<ul class="rank">
+        ${jogaram.map(res => {
+          const m = membroDe(res.atleta_id) || {};
+          const sc = scouts.filter(s => s.atleta_id === res.atleta_id).map(s => `${s.codigo} ${s.qtd}`).join(" · ");
+          const v = Number(res.preco_depois) - Number(res.preco_antes);
+          return `
+          <li>
+            <span class="pos-pts">${m.posicao || ""}</span>
+            ${avatarDe(res.atleta_id)}
+            <div class="who"><b>${esc(nomeDe(res.atleta_id))}</b><span>${esc(sc || "Sem scouts")} · ${v ? `${v > 0 ? "↑" : "↓"} C$ ${cs(Math.abs(v))}` : "preço mantido"}</span></div>
+            <span class="val" style="${res.pontos < 0 ? "color:var(--ink-3)" : ""}">${res.pontos < 0 ? "−" : ""}${pts(Math.abs(res.pontos))}</span>
+          </li>`;
+        }).join("")}
+      </ul>` : `<div class="empty">Ninguém pontuou nessa rodada.</div>`}
+    </section>
+    ${cardClassificacao(rod)}`;
 }
 
 /* ---------- Regras e scouts (Slide 11) ---------- */
@@ -1255,7 +1343,10 @@ function cardCartolaAdmin(){
   const fecha = r ? new Date(r.fecha_em) : null;
   return `
     <section class="card fade" style="animation-delay:.04s">
-      <div class="eyebrow">Cartola da pelada</div><div class="h2">Rodadas e scouts</div>
+      <div class="card-head" style="margin-bottom:0">
+        <div><div class="eyebrow">Cartola da pelada</div><div class="h2">Rodadas e scouts</div></div>
+        ${location.hash === "#cartola" ? "" : `<a class="btn sm" href="#cartola">Ver o Cartola</a>`}
+      </div>
       <div class="setting" style="margin-top:14px">
         <div><b>Cartola ligado</b><span>Mostra a aba Cartola para os jogadores</span></div>
         <button class="switch ${P.cartola_ativo ? "on" : ""}" data-act="cartAtivo" role="switch" aria-checked="${P.cartola_ativo}" aria-label="Cartola ligado"></button>
