@@ -419,9 +419,11 @@ async function entrar(user){
     if (convite) {
       gravar("convite", null);
       const id = ok(await sb.rpc("entrar_na_pelada", { codigo: convite }));
-      gravar("pelada", id);
-      if (app.dev) gravar("modo", "jogador");
-      aviso("Você entrou na pelada!");
+      if (id) {
+        gravar("pelada", id);
+        if (app.dev) gravar("modo", "jogador");
+        aviso("Você entrou na pelada!");
+      } else gravar("modo", "dev");   // código do dev: abre o painel
     }
     await carregarPeladas();
     app.modoDev = app.dev && ler("modo") !== "jogador";
@@ -1419,7 +1421,7 @@ const FORMS = {
   codigo: (f, d) => comBotao(f, async msg => {
     const codigo = d.get("codigo").trim().toUpperCase();
     state.loginEmail = d.get("email").trim();
-    const nome = ok(await sb.rpc("pelada_por_codigo", { codigo }));
+    const nome = ok(await sb.rpc("pelada_por_codigo", { codigo, email: state.loginEmail }));
     if (!nome) throw new Error("Código de convite inválido");
     gravar("convite", codigo);
     state.loginPelada = nome;
@@ -1446,6 +1448,7 @@ const FORMS = {
   }),
   entrarCodigo: (f, d) => run(async () => {
     const id = ok(await sb.rpc("entrar_na_pelada", { codigo: d.get("codigo").trim().toUpperCase() }));
+    if (!id) return ACOES.painel();   // código do dev
     await carregarPeladas();
     location.hash = "inicio";
     await abrirPelada(id);
