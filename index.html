@@ -301,7 +301,7 @@ const state = { periodo: "mes", stat: "gols", login: "codigo", loginEmail: "", l
   busca: "", filtro: "todas", verTodas: false, novaPelada: false, buscaUsu: "",
   buscaJog: "", filtroJog: "todos", verTodosJog: false, editando: null, addJogador: false, editMetrica: null,
   mercPos: "todos", mercBusca: "", mercOrdem: "media", mercTodos: false, pontRodada: null, faq: 0, renomear: false,
-  capitao: null, capitaoRodada: undefined, confirmEncerrar: false };
+  capitao: null, capitaoRodada: undefined, confirmEncerrar: false, editScout: null };
 
 /* ===================== REGRAS ===================== */
 const CHUTEIRAS = [
@@ -906,6 +906,13 @@ const NOME_POS = { GOL: ["goleiro", "goleiros"], ZAG: ["zagueiro", "zagueiros"],
 const DIAS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
 const DIAS_CURTOS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const CAPITAO = 1.5;
+const GRUPOS_SCOUT = [["Ataque", ["G", "A", "FT", "FD", "FF", "FS"]], ["Defesa e goleiro", ["DS", "SG", "DE", "DP", "V"]], ["Negativos", ["GC", "GS", "PP", "FC", "CA", "CV"]]];
+const SCOUTS_SIMPLES = ["G", "A", "V", "DE", "SG", "GC", "CA", "CV"];   // o básico que todo organizador consegue anotar
+// scouts com a configuração da pelada: ligado/desligado e pontos trocados pelo presidente
+const scoutsDaPelada = () => {
+  const off = app.pelada.cartola_scouts_off || [], troca = app.pelada.cartola_pontos || {};
+  return cart().regras.map(r => ({ ...r, padrao: Number(r.pontos), pontos: troca[r.codigo] != null ? Number(troca[r.codigo]) : Number(r.pontos), ativo: !off.includes(r.codigo) }));
+};
 const cs = n => Number(n || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const pts = n => Number(n || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const sinal = (n, f = pts) => `${n < 0 ? "−" : "+"}${f(Math.abs(n))}`;
@@ -1017,7 +1024,7 @@ function renderCartolaGeral(){
       stats: [[encerradas().length, "Rodadas jogadas"], [atletas, "No mercado"], [app.membros.length - atletas, "Sem posição"]]
     })}
     ${subnavCartola("cartola")}
-    ${souPresidente() ? cardCartolaAdmin() : ""}
+    ${souPresidente() ? cardCartolaAdmin() + cardCartolaScouts() : ""}
     <section class="card fade" style="animation-delay:.08s">
       <div class="eyebrow">Liga ${esc(app.pelada.nome)}</div><div class="h2">Times</div>
       ${tabela.length ? `<ul class="rank" style="margin-top:10px">
@@ -1297,8 +1304,9 @@ const FAQ_CARTOLA = [
 ];
 function renderRegras(){
   view.className = "grid solo wide";
-  const regras = cart().regras;
+  const regras = scoutsDaPelada().filter(r => r.ativo);
   const grupo = codigos => codigos.map(c => regras.find(r => r.codigo === c)).filter(Boolean);
+  const card = (eyebrow, titulo, codigos) => { const itens = grupo(codigos); return itens.length ? `<section class="card fade"><div class="eyebrow">${eyebrow}</div><div class="h2">${titulo}</div>${lista(itens)}</section>` : ""; };
   const sub = r => r.posicoes ? (r.posicoes.length > 1 ? "Goleiro e zagueiros" : "Goleiro") : ["G", "A", "DS", "V"].includes(r.codigo) ? "Todas as posições" : "";
   const lista = itens => `<ul class="list" style="margin-top:8px">${itens.map(r => `
     <li><span class="cod">${r.codigo}</span><div class="who"><b>${esc(r.nome)}</b>${sub(r) ? `<span>${sub(r)}</span>` : ""}</div>
@@ -1323,14 +1331,50 @@ function renderRegras(){
         <li style="align-items:flex-start"><span class="num ${i === 0 ? "lime" : ""}">${i + 1}</span>
           <div class="who"><b style="white-space:normal">${t}</b><span style="font-size:13px;color:var(--ink-2)">${esc(d)}</span></div></li>`).join("")}</ul>
     </section>
-    <section class="card fade"><div class="eyebrow">Pontos positivos</div><div class="h2">Ataque</div>${lista(grupo(["G", "A", "FT", "FD", "FF", "FS"]))}</section>
-    <section class="card fade"><div class="eyebrow">Pontos positivos</div><div class="h2">Defesa e goleiro</div>${lista(grupo(["DS", "SG", "DE", "DP", "V"]))}</section>
-    <section class="card fade"><div class="eyebrow">Perde pontos</div><div class="h2">Negativos</div>${lista(grupo(["GC", "GS", "PP", "FC", "CA", "CV"]))}</section>
+    ${card("Pontos positivos", "Ataque", GRUPOS_SCOUT[0][1])}
+    ${card("Pontos positivos", "Defesa e goleiro", GRUPOS_SCOUT[1][1])}
+    ${card("Perde pontos", "Negativos", GRUPOS_SCOUT[2][1])}
     <section class="card fade">
       <div class="eyebrow">Dúvidas</div><div class="h2">Sobre as cartoletas</div>
       <ul class="list faq" style="margin-top:8px">${FAQ_CARTOLA.map(([q, a], i) => `
         <li><button data-act="cartFaq" data-i="${i}" aria-expanded="${state.faq === i}">${q}<span>${state.faq === i ? "−" : "+"}</span></button>
           ${state.faq === i ? `<p>${a}</p>` : ""}</li>`).join("")}</ul>
+    </section>`;
+}
+
+/* ---------- Cartola · quais scouts contam nesta pelada ---------- */
+function cardCartolaScouts(){
+  const todos = scoutsDaPelada();
+  const ligados = todos.filter(s => s.ativo).length;
+  const onde = s => s.posicoes ? (s.posicoes.length > 1 ? "Goleiro e zagueiros" : "Só goleiro") : "Todas as posições";
+  return `
+    <section class="card fade" style="animation-delay:.06s">
+      <div class="eyebrow">Cartola da pelada</div><div class="h2">Scouts que contam</div>
+      <p class="note">Ligue só o que dá pra anotar na sua pelada. Os desligados somem das regras e não somam pontos. ${ligados} de ${todos.length} ligados.</p>
+      <div class="row" style="margin-top:12px">
+        <button class="btn ghost sm" data-act="cartPreset" data-valor="simples">Usar o simples</button>
+        <button class="btn ghost sm" data-act="cartPreset" data-valor="completo">Ligar todos</button>
+      </div>
+      <p class="hint">Simples: gol, assistência, vitória, defesa difícil, jogo sem sofrer gol, gol contra e cartões. As mudanças valem a partir da próxima rodada encerrada.</p>
+      ${GRUPOS_SCOUT.map(([titulo, codigos]) => `
+        <div class="sub-title" style="margin-top:22px">${titulo}</div>
+        <ul class="list">
+          ${codigos.map(c => todos.find(s => s.codigo === c)).filter(Boolean).map(s => `
+            <li class="${s.ativo ? "" : "li-off"}">
+              <span class="cod">${s.codigo}</span>
+              <div class="who"><b>${esc(s.nome)}</b><span>${sinal(s.pontos)} pts${s.pontos !== s.padrao ? ` (padrão ${sinal(s.padrao)})` : ""} · ${onde(s)}</span></div>
+              ${s.ativo ? `<a class="lnk" data-act="cartEditScout" data-cod="${s.codigo}">${state.editScout === s.codigo ? "Fechar" : "Pontos"}</a>` : ""}
+              <button class="switch ${s.ativo ? "on" : ""}" data-act="cartScoutLiga" data-cod="${s.codigo}" role="switch" aria-checked="${s.ativo}" aria-label="${esc(s.nome)}"></button>
+            </li>
+            ${state.editScout === s.codigo ? `<li class="edit"><form data-form="cartPonto" data-cod="${s.codigo}" class="box">
+              <label class="field" style="margin-top:0"><span>Pontos por ${esc(s.nome.toLowerCase())}</span>
+                <input class="input" name="pontos" type="number" step="0.1" min="-20" max="20" value="${s.pontos}" required></label>
+              <div class="row" style="margin-top:12px">
+                <button class="btn sm">Salvar</button>
+                ${s.pontos !== s.padrao ? `<button type="button" class="btn ghost sm" data-act="cartPontoPadrao" data-cod="${s.codigo}">Voltar ao padrão (${sinal(s.padrao)})</button>` : ""}
+              </div>
+            </form></li>` : ""}`).join("")}
+        </ul>`).join("")}
     </section>`;
 }
 
@@ -1367,11 +1411,11 @@ function cardCartolaAdmin(){
         <div class="sub-title">Lançar scouts (${scouts.reduce((s, x) => s + x.qtd, 0)})</div>
         <form data-form="cartScout" class="row">
           <select class="input" name="atleta" required><option value="">Jogador</option>${atletas.map(m => `<option value="${m.jogador_id}">${esc(nomeDe(m.jogador_id))} (${m.posicao})</option>`).join("")}</select>
-          <select class="input" name="codigo">${cart().regras.map(g => `<option value="${g.codigo}">${g.codigo} · ${esc(g.nome)}</option>`).join("")}</select>
+          <select class="input" name="codigo">${scoutsDaPelada().filter(g => g.ativo).map(g => `<option value="${g.codigo}">${g.codigo} · ${esc(g.nome)}</option>`).join("")}</select>
           <input class="input" name="qtd" type="number" min="1" max="20" value="1" style="flex:0 0 72px" aria-label="Quantidade">
           <button class="btn">+ Lançar</button>
         </form>
-        ${app.partidas.length ? `<form data-form="cartImportar" class="row" style="margin-top:8px">
+        ${app.partidas.length && scoutsDaPelada().some(g => g.ativo && (g.codigo === "G" || g.codigo === "A")) ? `<form data-form="cartImportar" class="row" style="margin-top:8px">
           <select class="input" name="partida">${[...app.partidas].reverse().map(x => `<option value="${x.id}">${dataLonga(x.data)}</option>`).join("")}</select>
           <button class="btn ghost">Puxar gols e assistências</button>
         </form>` : ""}
@@ -1502,6 +1546,7 @@ function renderPeladaAdmin(){
     ${heroPelada()}
     ${cardPartidas()}
     ${cardCartolaAdmin()}
+    ${app.pelada.cartola_ativo ? cardCartolaScouts() : ""}
     ${cardDados()}
     ${cardPotes()}
     ${cardMetricas()}
@@ -2013,6 +2058,24 @@ const ACOES = {
       : await alvo.delete().eq("rodada_id", r.id).eq("atleta_id", el.dataset.atleta).eq("codigo", el.dataset.codigo));
     await carregarCartola(); route(true);
   }),
+  cartScoutLiga: el => run(async () => {
+    const off = new Set(app.pelada.cartola_scouts_off || []);
+    off.has(el.dataset.cod) ? off.delete(el.dataset.cod) : off.add(el.dataset.cod);
+    if (state.editScout === el.dataset.cod) state.editScout = null;
+    await salvarPelada({ cartola_scouts_off: [...off] }); route(true);
+  }),
+  cartPreset: el => run(async () => {
+    const off = el.dataset.valor === "simples" ? GRUPOS_SCOUT.flatMap(g => g[1]).filter(c => !SCOUTS_SIMPLES.includes(c)) : [];
+    state.editScout = null;
+    await salvarPelada({ cartola_scouts_off: off }); route(true);
+  }),
+  cartEditScout: el => { state.editScout = state.editScout === el.dataset.cod ? null : el.dataset.cod; route(true); },
+  cartPontoPadrao: el => run(async () => {
+    const troca = { ...(app.pelada.cartola_pontos || {}) };
+    delete troca[el.dataset.cod];
+    state.editScout = null;
+    await salvarPelada({ cartola_pontos: troca }); route(true);
+  }),
   cartEncerrar: () => { state.confirmEncerrar = true; route(true); },
   cartEncerrarNao: () => { state.confirmEncerrar = false; route(true); },
   cartEncerrarSim: () => run(async () => {
@@ -2189,6 +2252,14 @@ const FORMS = {
       { onConflict: "rodada_id,atleta_id,codigo" }));
     await carregarCartola(); route(true);
     aviso(`${codigo} ×${qtd} para ${nomeDe(atleta)}`);
+  }),
+  cartPonto: (f, d) => run(async () => {
+    const cod = f.dataset.cod, valor = Math.round(Number(d.get("pontos")) * 10) / 10;
+    const padrao = Number((cart().regras.find(r => r.codigo === cod) || {}).pontos);
+    const troca = { ...(app.pelada.cartola_pontos || {}) };
+    if (valor === padrao) delete troca[cod]; else troca[cod] = valor;
+    state.editScout = null;
+    await salvarPelada({ cartola_pontos: troca }); route(true);
   }),
   cartImportar: (f, d) => run(async () => {
     const n = ok(await sb.rpc("cartola_importar_partida", { rodada: rodadaAberta().id, partida: d.get("partida") }));
