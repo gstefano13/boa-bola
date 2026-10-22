@@ -301,7 +301,7 @@ const state = { periodo: "mes", stat: "gols", login: "codigo", loginEmail: "", l
   busca: "", filtro: "todas", verTodas: false, novaPelada: false, buscaUsu: "",
   buscaJog: "", filtroJog: "todos", verTodosJog: false, editando: null, addJogador: false, editMetrica: null,
   mercPos: "todos", mercBusca: "", mercOrdem: "media", mercTodos: false, pontRodada: null, faq: 0, renomear: false,
-  capitao: null, capitaoRodada: undefined, confirmEncerrar: false, editScout: null };
+  capitao: null, capitaoRodada: undefined, confirmEncerrar: false, editScout: null, ajustesAbertos: false };
 
 /* ===================== REGRAS ===================== */
 const CHUTEIRAS = [
@@ -1342,6 +1342,45 @@ function renderRegras(){
     </section>`;
 }
 
+/* ---------- Cartola · cruzamento com a partida ----------
+   O presidente anota tudo na partida (gols, assistências e "outras métricas").
+   Ao encerrar a rodada, o banco transforma isso em scouts; aqui é só a prévia. */
+const METRICA_DO_SCOUT = { V: "vitorias", DE: "defesas", CA: "cartao_amarelo", CV: "cartao_vermelho", GC: "gol_contra" };
+const CODIGOS_LANCE = ["FT", "FD", "FF", "FS", "DS", "SG", "DE", "DP", "V", "GC", "GS", "PP", "FC", "CA", "CV"];
+function scoutDaMetrica(metrica){
+  const k = String(metrica).toLowerCase();
+  const mapeado = Object.keys(METRICA_DO_SCOUT).find(c => METRICA_DO_SCOUT[c] === k);
+  if (mapeado) return mapeado;
+  return CODIGOS_LANCE.includes(String(metrica).toUpperCase()) ? String(metrica).toUpperCase() : null;
+}
+// o que dá pra marcar numa partida: métricas da pelada + scouts do Cartola ligados (sem repetir)
+function opcoesLance(){
+  const op = new Map();
+  app.pelada.metricas.filter(m => m.ativo && m.tipo === "manual").forEach(m => op.set(m.chave, m.nome));
+  if (app.pelada.cartola_ativo) scoutsDaPelada().filter(s => s.ativo && s.codigo !== "G" && s.codigo !== "A").forEach(s => {
+    const valor = METRICA_DO_SCOUT[s.codigo] || s.codigo;
+    if (!op.has(valor)) op.set(valor, s.nome);
+  });
+  return [...op];
+}
+const nomeLance = metrica => (app.pelada.metricas.find(m => m.chave === metrica) || {}).nome
+  || (cart().regras.find(r => r.codigo === scoutDaMetrica(metrica)) || {}).nome || metrica;
+
+// partida da rodada: a escolhida ou a mais recente ainda sem rodada (mesma regra do banco)
+function partidaDaRodada(r){
+  if (r.partida_id) return app.partidas.find(p => p.id === r.partida_id) || null;
+  const usadas = new Set(cart().rodadas.map(x => x.partida_id).filter(Boolean));
+  return [...app.partidas].reverse().find(p => !usadas.has(p.id)) || null;
+}
+function scoutsDaPartida(partidaId){
+  const ativos = new Set(scoutsDaPelada().filter(s => s.ativo).map(s => s.codigo));
+  const conta = new Map();
+  const soma = (atleta, codigo, n) => { if (!atleta || !codigo || !ativos.has(codigo)) return; const k = atleta + "|" + codigo; conta.set(k, (conta.get(k) || 0) + n); };
+  app.gols.filter(g => g.partida_id === partidaId).forEach(g => { soma(g.autor_id, "G", 1); soma(g.assistencia_id, "A", 1); });
+  app.lances.filter(l => l.partida_id === partidaId).forEach(l => soma(l.jogador_id, scoutDaMetrica(l.metrica), l.qtd));
+  return [...conta].map(([k, qtd]) => { const [atleta, codigo] = k.split("|"); return { atleta, codigo, qtd }; });
+}
+
 /* ---------- Cartola · quais scouts contam nesta pelada ---------- */
 function cardCartolaScouts(){
   const todos = scoutsDaPelada();
@@ -1378,6 +1417,33 @@ function cardCartolaScouts(){
     </section>`;
 }
 
+// bloco "partida desta rodada" com a prévia do que vira ponto
+function cartPartidaHtml(r){
+  const partida = partidaDaRodada(r);
+  const usadas = new Set(cart().rodadas.filter(x => x.id !== r.id).map(x => x.partida_id).filter(Boolean));
+  const livres = [...app.partidas].reverse().filter(p => !usadas.has(p.id));
+  const scouts = partida ? scoutsDaPartida(partida.id) : [];
+  const presentes = partida ? app.presencas.filter(p => p.partida_id === partida.id).length : 0;
+  const porCodigo = new Map();
+  scouts.forEach(s => porCodigo.set(s.codigo, (porCodigo.get(s.codigo) || 0) + s.qtd));
+  const resumo = [...porCodigo].map(([c, n]) => `${c} ${n}`).join(" · ");
+  return `
+    <label class="field"><span>Partida desta rodada</span>
+      <select class="input" data-change="cartPartida">
+        ${livres.length ? "" : `<option value="">Nenhuma partida lançada ainda</option>`}
+        ${livres.map(p => `<option value="${p.id}" ${partida && partida.id === p.id ? "selected" : ""}>${dataLonga(p.data)}${!r.partida_id && partida && partida.id === p.id ? " (sugerida)" : ""}</option>`).join("")}
+      </select></label>
+    ${partida ? `
+      <div class="box" style="margin-top:10px">
+        <b style="font-size:14px;font-weight:500">Puxado automaticamente da partida</b>
+        <p class="note" style="margin-top:4px">${plural(presentes, "jogador presente", "jogadores presentes")} · ${scouts.length ? esc(resumo) : "nenhum gol ou métrica lançada ainda"}</p>
+        ${scouts.length ? `<ul class="list" style="margin-top:4px">
+          ${[...new Set(scouts.map(s => s.atleta))].map(a => `
+            <li>${avatarDe(a)}<div class="who"><b>${esc(nomeDe(a))}</b><span>${scouts.filter(s => s.atleta === a).map(s => `${s.codigo} ${s.qtd}`).join(" · ")}</span></div></li>`).join("")}
+        </ul>` : `<p class="hint">Lance presença, gols e as outras métricas no card <b>Partidas</b>. Eles entram aqui sozinhos.</p>`}
+      </div>` : `<p class="hint">Crie a partida da semana no card <b>Partidas</b> e anote presença, gols e cartões. O Cartola usa esses dados.</p>`}`;
+}
+
 /* ---------- Cartola · painel do presidente e do dev ---------- */
 function cardCartolaAdmin(){
   const P = app.pelada, r = rodadaAberta();
@@ -1407,26 +1473,26 @@ function cardCartolaAdmin(){
       : `
         <p class="note" style="margin-top:14px"><b>Rodada ${r.numero}</b> · ${mercadoAberto()
           ? `mercado aberto até ${fecha.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" })} às ${fecha.getHours()}h`
-          : "mercado fechado: lance os scouts e encerre a rodada"} · ${plural(times, "time escalado", "times escalados")}</p>
-        <div class="sub-title">Lançar scouts (${scouts.reduce((s, x) => s + x.qtd, 0)})</div>
-        <form data-form="cartScout" class="row">
-          <select class="input" name="atleta" required><option value="">Jogador</option>${atletas.map(m => `<option value="${m.jogador_id}">${esc(nomeDe(m.jogador_id))} (${m.posicao})</option>`).join("")}</select>
-          <select class="input" name="codigo">${scoutsDaPelada().filter(g => g.ativo).map(g => `<option value="${g.codigo}">${g.codigo} · ${esc(g.nome)}</option>`).join("")}</select>
-          <input class="input" name="qtd" type="number" min="1" max="20" value="1" style="flex:0 0 72px" aria-label="Quantidade">
-          <button class="btn">+ Lançar</button>
-        </form>
-        ${app.partidas.length && scoutsDaPelada().some(g => g.ativo && (g.codigo === "G" || g.codigo === "A")) ? `<form data-form="cartImportar" class="row" style="margin-top:8px">
-          <select class="input" name="partida">${[...app.partidas].reverse().map(x => `<option value="${x.id}">${dataLonga(x.data)}</option>`).join("")}</select>
-          <button class="btn ghost">Puxar gols e assistências</button>
-        </form>` : ""}
-        ${scouts.length ? `<ul class="list" style="margin-top:6px">
-          ${scouts.map(s => `
-            <li><span class="cod">${s.codigo}</span>
-              <div class="who"><b>${esc(nomeDe(s.atleta_id))}</b><span>${esc((cart().regras.find(g => g.codigo === s.codigo) || {}).nome || "")} × ${s.qtd}</span></div>
-              <button class="btn ghost sm" data-act="cartScoutMenos" data-atleta="${s.atleta_id}" data-codigo="${s.codigo}" data-qtd="${s.qtd}">−1</button></li>`).join("")}
-        </ul>` : ""}
+          : "mercado fechado: lance a partida e encerre a rodada"} · ${plural(times, "time escalado", "times escalados")}</p>
+        ${cartPartidaHtml(r)}
+        <details class="box" style="margin-top:14px" ${state.ajustesAbertos ? "open" : ""}>
+          <summary data-act="cartAjustes" style="cursor:pointer;font-weight:500;font-size:14px">Ajustes manuais (opcional) · ${scouts.reduce((s, x) => s + x.qtd, 0)}</summary>
+          <p class="hint">Só para o que não deu pra anotar na partida. Soma com o que vem da partida.</p>
+          <form data-form="cartScout" class="row" style="margin-top:10px">
+            <select class="input" name="atleta" required><option value="">Jogador</option>${atletas.map(m => `<option value="${m.jogador_id}">${esc(nomeDe(m.jogador_id))} (${m.posicao})</option>`).join("")}</select>
+            <select class="input" name="codigo">${scoutsDaPelada().filter(g => g.ativo).map(g => `<option value="${g.codigo}">${g.codigo} · ${esc(g.nome)}</option>`).join("")}</select>
+            <input class="input" name="qtd" type="number" min="1" max="20" value="1" style="flex:0 0 72px" aria-label="Quantidade">
+            <button class="btn">+ Ajuste</button>
+          </form>
+          ${scouts.length ? `<ul class="list" style="margin-top:6px">
+            ${scouts.map(s => `
+              <li><span class="cod">${s.codigo}</span>
+                <div class="who"><b>${esc(nomeDe(s.atleta_id))}</b><span>${esc((cart().regras.find(g => g.codigo === s.codigo) || {}).nome || "")} × ${s.qtd}</span></div>
+                <button class="btn ghost sm" data-act="cartScoutMenos" data-atleta="${s.atleta_id}" data-codigo="${s.codigo}" data-qtd="${s.qtd}">−1</button></li>`).join("")}
+          </ul>` : ""}
+        </details>
         ${state.confirmEncerrar
-          ? `<p class="note" style="margin-top:16px">Encerrar soma os pontos de todos os times, atualiza os preços e abre a rodada ${r.numero + 1}. Não dá pra desfazer.</p>
+          ? `<p class="note" style="margin-top:16px">Encerrar puxa os scouts da partida${partidaDaRodada(r) ? ` de ${dataBr(partidaDaRodada(r).data)}` : ""}, soma os ajustes, calcula os pontos de todos os times, atualiza os preços e abre a rodada ${r.numero + 1}. Não dá pra desfazer.</p>
              <div class="dois" style="margin-top:10px"><button class="btn ghost" data-act="cartEncerrarNao">Cancelar</button><button class="btn" data-act="cartEncerrarSim">Encerrar rodada</button></div>`
           : `<button class="btn block" data-act="cartEncerrar">Encerrar rodada ${r.numero} e calcular pontos</button>`}`}
     </section>`;
@@ -1664,7 +1730,7 @@ function cardPartidas(){
   if (!partidas.some(x => x.id === state.partida)) state.partida = partidas[0] ? partidas[0].id : null;
   const presentes = new Set(app.presencas.filter(x => x.partida_id === state.partida).map(x => x.jogador_id));
   const golsDaPartida = app.gols.filter(g => g.partida_id === state.partida);
-  const manuais = app.pelada.metricas.filter(m => m.ativo && m.tipo === "manual");
+  const manuais = opcoesLance();
   const lancesDaPartida = app.lances.filter(l => l.partida_id === state.partida);
   const candidatos = presentes.size ? [...presentes] : app.membros.map(m => m.jogador_id);
   const opcoes = ids => ids.map(id => `<option value="${id}">${esc(nomeDe(id))}</option>`).join("");
@@ -1706,16 +1772,17 @@ function cardPartidas(){
         </ul>` : ""}
         ${manuais.length ? `
           <div class="sub-title">Outras métricas (${lancesDaPartida.reduce((s, l) => s + l.qtd, 0)})</div>
+          ${app.pelada.cartola_ativo ? `<p class="hint" style="margin:0 0 8px">Tudo que você marca aqui (e os gols acima) vira ponto no Cartola sozinho, quando a rodada for encerrada.</p>` : ""}
           <form data-form="novoLance" class="row">
             <select class="input" name="jogador" required><option value="">Jogador</option>${opcoes(candidatos)}</select>
-            <select class="input" name="metrica" required>${manuais.map(m => `<option value="${esc(m.chave)}">${esc(m.nome)}</option>`).join("")}</select>
+            <select class="input" name="metrica" required>${manuais.map(([valor, nome]) => `<option value="${esc(valor)}">${esc(nome)}</option>`).join("")}</select>
             <button class="btn">+ Marcar</button>
           </form>
           ${lancesDaPartida.length ? `<ul class="list" style="margin-top:6px">
             ${lancesDaPartida.map(l => `
               <li>
                 ${avatarDe(l.jogador_id)}
-                <div class="who"><b>${esc(nomeDe(l.jogador_id))}</b><span>${esc((app.pelada.metricas.find(m => m.chave === l.metrica) || { nome: l.metrica }).nome)} × ${l.qtd}</span></div>
+                <div class="who"><b>${esc(nomeDe(l.jogador_id))}</b><span>${esc(nomeLance(l.metrica))} × ${l.qtd}</span></div>
                 <button class="btn ghost sm" data-act="apagarLance" data-id="${l.id}" data-qtd="${l.qtd}">−1</button>
               </li>`).join("")}
           </ul>` : ""}` : ""}
@@ -2076,6 +2143,7 @@ const ACOES = {
     state.editScout = null;
     await salvarPelada({ cartola_pontos: troca }); route(true);
   }),
+  cartAjustes: el => { const d = el.parentElement; d.open = !d.open; state.ajustesAbertos = d.open; },
   cartEncerrar: () => { state.confirmEncerrar = true; route(true); },
   cartEncerrarNao: () => { state.confirmEncerrar = false; route(true); },
   cartEncerrarSim: () => run(async () => {
@@ -2110,6 +2178,11 @@ const MUDANCAS = {
   peso: el => run(async () => { await salvarPelada({ peso_votacao: Number(el.value) }); }),
   mercOrdem: el => { state.mercOrdem = el.value; renderListaMerc(); },
   pontRodada: el => { state.pontRodada = el.value; route(true); },
+  cartPartida: el => run(async () => {
+    ok(await sb.rpc("cartola_vincular_partida", { rodada: rodadaAberta().id, partida: el.value || null }));
+    await carregarCartola(); route(true);
+    aviso("Partida da rodada definida");
+  }),
   cartDia: el => run(async () => { await salvarPelada({ cartola_dia: Number(el.value) }); route(true); }),
   cartHora: el => run(async () => { await salvarPelada({ cartola_hora: Number(el.value) }); route(true); })
 };
@@ -2260,11 +2333,6 @@ const FORMS = {
     if (valor === padrao) delete troca[cod]; else troca[cod] = valor;
     state.editScout = null;
     await salvarPelada({ cartola_pontos: troca }); route(true);
-  }),
-  cartImportar: (f, d) => run(async () => {
-    const n = ok(await sb.rpc("cartola_importar_partida", { rodada: rodadaAberta().id, partida: d.get("partida") }));
-    await carregarCartola(); route(true);
-    aviso(n ? `${plural(n, "scout puxado", "scouts puxados")} da partida (gols e assistências)` : "Essa partida não tem gols lançados");
   }),
   patrocinio: (f, d) => run(async () => {
     const patrocinio = { nome: d.get("nome").trim(), texto: d.get("texto").trim(), url: d.get("url").trim(), logo: d.get("logo").trim() };
