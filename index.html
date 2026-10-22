@@ -253,6 +253,13 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .faq li{display:block}
 .faq button{width:100%;display:flex;justify-content:space-between;gap:12px;text-align:left;font-size:15.5px;font-weight:500;padding:4px 0}
 .faq p{font-size:14px;color:var(--ink-2);margin-top:8px;line-height:1.45}
+.escudo{flex:none;display:block}
+.preview-time{display:flex;align-items:center;gap:16px;margin:16px 0 4px;padding:16px;background:var(--soft);border:1px solid var(--line);border-radius:var(--r-md)}
+.preview-time b{display:block;font-size:20px;font-weight:500;letter-spacing:-.03em}
+.preview-time span{font-size:13px;color:var(--ink-2)}
+.cores{display:flex;flex-wrap:wrap;gap:8px}
+.cor{width:32px;height:32px;border-radius:50%;border:1px solid var(--line);box-shadow:inset 0 0 0 2px #fff}
+.cor.on{outline:2px solid var(--ink);outline-offset:2px}
 .nav a.on{background:#fff;color:var(--ink)}
 .nav svg{width:20px;height:20px}
 
@@ -301,7 +308,7 @@ const state = { periodo: "mes", stat: "gols", login: "codigo", loginEmail: "", l
   busca: "", filtro: "todas", verTodas: false, novaPelada: false, buscaUsu: "",
   buscaJog: "", filtroJog: "todos", verTodosJog: false, editando: null, addJogador: false, editMetrica: null,
   mercPos: "todos", mercBusca: "", mercOrdem: "media", mercTodos: false, pontRodada: null, faq: 0, renomear: false,
-  capitao: null, capitaoRodada: undefined, confirmEncerrar: false, editScout: null, ajustesAbertos: false };
+  capitao: null, capitaoRodada: undefined, confirmEncerrar: false, editScout: null, ajustesAbertos: false, editarTime: false, formTime: null };
 
 /* ===================== REGRAS ===================== */
 const CHUTEIRAS = [
@@ -599,19 +606,19 @@ function route(manterScroll){
   else if (app.modoDev) {
     const views = { peladas: renderPeladasDev, pelada: app.pelada ? renderPelada : renderPeladasDev, usuarios: renderUsuarios, rankings: renderRankingsDev, ajustes: renderAjustes };
     // dev vê o Cartola da pelada aberta em modo organizador (sem time próprio)
-    if (app.pelada) Object.assign(views, { cartola: renderCartola, mercado: renderMercado, pontuacao: renderPontuacao, regras: renderRegras });
+    if (app.pelada) Object.assign(views, { cartola: renderCartola, mercado: renderMercado, liga: renderLiga, pontuacao: renderPontuacao, regras: renderRegras });
     v = views[location.hash.slice(1)] ? location.hash.slice(1) : "peladas";
     itens = NAV_DEV;
     views[v]();
-    if (["pelada", "cartola", "mercado", "pontuacao", "regras"].includes(v)) v = "peladas";
+    if (["pelada", "cartola", "mercado", "liga", "pontuacao", "regras"].includes(v)) v = "peladas";
   } else if (!app.pelada) renderEscolher();
   else {
     const views = { inicio: renderInicio, jogadores: renderJogadores, rankings: renderRankings, pelada: renderPelada };
-    if (app.pelada.cartola_ativo) Object.assign(views, { cartola: renderCartola, mercado: renderMercado, pontuacao: renderPontuacao, regras: renderRegras });
+    if (app.pelada.cartola_ativo) Object.assign(views, { cartola: renderCartola, mercado: renderMercado, liga: renderLiga, pontuacao: renderPontuacao, regras: renderRegras });
     v = views[location.hash.slice(1)] ? location.hash.slice(1) : "inicio";
     itens = navJogador();
     views[v]();
-    if (["mercado", "pontuacao", "regras"].includes(v)) v = "cartola";
+    if (["mercado", "liga", "pontuacao", "regras"].includes(v)) v = "cartola";
   }
   const nav = document.getElementById("nav");
   nav.classList.toggle("cinco", itens.length > 4);
@@ -901,7 +908,42 @@ function renderRanking(limite, fonte, titulo){
    Cada jogador monta um time de 7 com C$ 100. Compras, vendas e capitão passam
    por funções do banco, que conferem saldo, vagas e se o mercado está aberto. */
 const POSICOES = ["GOL", "ZAG", "MEI", "ATA"];
-const VAGAS = { GOL: 1, ZAG: 2, MEI: 2, ATA: 2 };
+// formações: sempre 1 goleiro + ZAG-MEI-ATA
+const ESQUEMAS = [["2-2-2", "Equilibrado"], ["3-2-1", "Defensivo"], ["2-1-3", "Ofensivo"]];
+const vagasDe = esquema => { const [z, m, a] = (esquema || "2-2-2").split("-").map(Number); return { GOL: 1, ZAG: z, MEI: m, ATA: a }; };
+const esquemaAtual = () => (cart().meuTime || {}).esquema || "2-2-2";
+
+/* ---------- Escudo do time (desenhado na hora, a partir de forma, padrão, cores e sigla) ---------- */
+const CORES_TIME = ["#0C0C0C", "#FFFFFF", "#17A34A", "#C9F36B", "#1D4ED8", "#60A5FA", "#DC2626", "#F59E0B", "#FACC15", "#7C3AED", "#EC4899", "#78350F"];
+const FORMAS_ESCUDO = [["classico", "Clássico"], ["moderno", "Moderno"], ["redondo", "Redondo"], ["losango", "Losango"]];
+const PADROES_ESCUDO = [["liso", "Liso"], ["listras", "Listras"], ["faixa", "Faixa"], ["metade", "Metade"]];
+const escudoPadrao = nome => ({ forma: "classico", padrao: "liso", cor1: "#0C0C0C", cor2: "#C9F36B", sigla: iniciais(nome || "FC").slice(0, 3) || "FC" });
+let idEscudo = 0;
+function escudoSvg(e, tam = 40){
+  e = e || escudoPadrao("?");
+  const id = `esc${++idEscudo}`;
+  const contorno = {
+    classico: `<path d="M20 2 36 7v13c0 10-7 16-16 19C11 36 4 30 4 20V7z"/>`,
+    moderno: `<path d="M6 3h28v19c0 9-6 14-14 17C12 36 6 31 6 22z"/>`,
+    redondo: `<circle cx="20" cy="20" r="18"/>`,
+    losango: `<path d="M20 2 38 20 20 38 2 20z"/>`
+  }[e.forma] || "";
+  const desenho = {
+    liso: "",
+    listras: [6, 14, 22, 30].map(x => `<rect x="${x}" y="0" width="4" height="40" fill="${e.cor2}"/>`).join(""),
+    faixa: `<path d="M0 26 26 0h10L0 36z" fill="${e.cor2}"/>`,
+    metade: `<rect x="20" y="0" width="20" height="40" fill="${e.cor2}"/>`
+  }[e.padrao] || "";
+  const claro = c => { const n = parseInt(c.slice(1), 16); return ((n >> 16) * 299 + ((n >> 8) & 255) * 587 + (n & 255) * 114) / 1000 > 150; };
+  const corTexto = e.padrao === "liso" ? (claro(e.cor1) ? "#0C0C0C" : "#FFFFFF") : "#FFFFFF";
+  return `<svg class="escudo" width="${tam}" height="${tam}" viewBox="0 0 40 40" aria-hidden="true">
+    <defs><clipPath id="${id}">${contorno}</clipPath></defs>
+    <g clip-path="url(#${id})"><rect width="40" height="40" fill="${e.cor1}"/>${desenho}</g>
+    <g fill="none" stroke="rgba(12,12,12,.85)" stroke-width="1.6">${contorno}</g>
+    <text x="20" y="${e.forma === "losango" ? 24 : 23}" text-anchor="middle" font-family="Geist, sans-serif" font-weight="700" font-size="${e.sigla.length > 2 ? 10 : 12}"
+      fill="${corTexto}" stroke="${e.padrao === "liso" ? "none" : "rgba(12,12,12,.55)"}" stroke-width="2" paint-order="stroke">${esc(e.sigla)}</text>
+  </svg>`;
+}
 const NOME_POS = { GOL: ["goleiro", "goleiros"], ZAG: ["zagueiro", "zagueiros"], MEI: ["meia", "meias"], ATA: ["atacante", "atacantes"] };
 const DIAS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
 const DIAS_CURTOS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -986,7 +1028,8 @@ function liga(){
 }
 const minhaPosicaoLiga = () => { const i = liga().findIndex(t => t.jogador_id === app.user.id); return i < 0 ? null : i + 1; };
 function faltamNoTime(escalados){
-  const faltas = POSICOES.map(p => [p, VAGAS[p] - escalados.filter(e => e.posicao === p).length]).filter(([, n]) => n > 0);
+  const vagas = vagasDe(esquemaAtual());
+  const faltas = POSICOES.map(p => [p, vagas[p] - escalados.filter(e => e.posicao === p).length]).filter(([, n]) => n > 0);
   if (!faltas.length) return "Time completo";
   const partes = faltas.map(([p, n]) => `${n} ${NOME_POS[p][n > 1 ? 1 : 0]}`);
   const total = faltas.reduce((s, [, n]) => s + n, 0);
@@ -1007,7 +1050,7 @@ function heroCartola({ status, titulo, sub, rotulo, numero, pill, pillLime = tru
       <div class="hero-stats">${stats.map(([b, s]) => `<div><b>${b}</b><span>${s}</span></div>`).join("")}</div>
     </section>`;
 }
-const subnavCartola = ativo => `<nav class="subnav span2 fade">${[["cartola", cart().meuTime ? "Meu time" : "Visão geral"], ["mercado", "Mercado"], ["pontuacao", "Pontuação"], ["regras", "Regras"]]
+const subnavCartola = ativo => `<nav class="subnav span2 fade">${[["cartola", cart().meuTime ? "Meu time" : "Visão geral"], ["mercado", "Mercado"], ["liga", "Liga"], ["pontuacao", "Pontos"], ["regras", "Regras"]]
   .map(([k, v]) => `<a href="#${k}" class="${k === ativo ? "on" : ""}">${v}</a>`).join("")}</nav>`;
 
 /* ---------- Visão geral do organizador (dev, sem time próprio) ---------- */
@@ -1034,12 +1077,95 @@ function renderCartolaGeral(){
           return `
           <li class="${i < 3 ? "top" : ""}">
             <span class="pos">${i + 1}</span>
-            <div class="who"><b>${esc(x.nome)}</b><span>${esc(nomeDe(x.jogador_id))} · ${escalados.length}/7 escalados · patrimônio C$ ${cs(valor)}</span></div>
+            ${escudoSvg(x.escudo || escudoPadrao(x.nome), 34)}
+            <div class="who"><b>${esc(x.nome)}</b><span>${esc(nomeDe(x.jogador_id))} · ${x.esquema} · ${escalados.length}/7 escalados · patrimônio C$ ${cs(valor)}</span></div>
             <span class="val">${pts(x.total)}</span>
           </li>`;
         }).join("")}
       </ul>` : `<div class="empty">Nenhum time ainda.<br>Cada time é criado quando o jogador abre a aba Cartola.</div>`}
     </section>`;
+}
+
+/* ---------- Montar o time: nome, sigla, escudo e cores ---------- */
+function cardMontarTime(t){
+  if (!state.formTime) state.formTime = { nome: t.nome, ...(t.escudo || escudoPadrao(t.nome)) };
+  const f = state.formTime;
+  const cores = campo => `<div class="cores">${CORES_TIME.map(c => `<button type="button" class="cor ${f[campo] === c ? "on" : ""}" style="background:${c}" data-act="timeCor" data-campo="${campo}" data-valor="${c}" aria-label="Cor ${c}"></button>`).join("")}</div>`;
+  const opcoes = (lista, campo) => `<div class="seg">${lista.map(([k, v]) => `<button type="button" class="${f[campo] === k ? "on" : ""}" data-act="timeOpcao" data-campo="${campo}" data-valor="${k}">${v}</button>`).join("")}</div>`;
+  return `
+    <section class="card fade span2" style="animation-delay:.03s">
+      <div class="eyebrow">${t.escudo ? "Seu time" : "Primeiro passo"}</div><div class="h2">${t.escudo ? "Editar time" : "Monte seu time"}</div>
+      <p class="note">Nome, sigla, escudo e cores. É assim que ele aparece na liga.</p>
+      <div class="preview-time">
+        <div id="previewEscudo">${escudoSvg(f, 88)}</div>
+        <div><b id="previewNome">${esc(f.nome)}</b><span>${esc(nomeExibido())}</span></div>
+      </div>
+      <form data-form="cartTime">
+        <div class="two" style="grid-template-columns:2fr 1fr">
+          <label class="field"><span>Nome do time</span><input class="input" name="nome" value="${esc(f.nome)}" maxlength="40" required data-input="timeNome"></label>
+          <label class="field"><span>Sigla</span><input class="input mono" name="sigla" value="${esc(f.sigla)}" maxlength="3" required data-input="timeSigla" style="text-transform:uppercase"></label>
+        </div>
+        <div class="sub-title">Formato do escudo</div>${opcoes(FORMAS_ESCUDO, "forma")}
+        <div class="sub-title">Desenho</div>${opcoes(PADROES_ESCUDO, "padrao")}
+        <div class="sub-title">Cor principal</div>${cores("cor1")}
+        <div class="sub-title">Cor secundária</div>${cores("cor2")}
+        <div class="dois">
+          ${t.escudo ? `<button type="button" class="btn ghost" data-act="cartEditarTime">Cancelar</button>` : `<span></span>`}
+          <button class="btn">${t.escudo ? "Salvar time" : "Criar meu time"}</button>
+        </div>
+      </form>
+    </section>`;
+}
+const atualizarPreviewTime = () => {
+  const f = state.formTime, el = document.getElementById("previewEscudo"), nome = document.getElementById("previewNome");
+  if (el) el.innerHTML = escudoSvg(f, 88);
+  if (nome) nome.textContent = f.nome || "Seu time";
+};
+
+/* ---------- Liga: o campeonato ---------- */
+const nomeLiga = () => app.pelada.cartola_liga_nome || `Liga ${app.pelada.nome}`;
+function cardTabelaLiga(rod, titulo = "Classificação"){
+  const tabela = liga();
+  return `
+    <section class="card fade span2" style="animation-delay:.08s">
+      <div class="eyebrow">${esc(nomeLiga())}</div><div class="h2">${titulo}</div>
+      ${tabela.length ? `<ul class="rank" style="margin-top:10px">
+        ${tabela.map((x, i) => `
+          <li class="${i < 3 ? "top" : ""} ${x.jogador_id === app.user.id ? "me" : ""}">
+            <span class="pos">${i + 1}</span>
+            ${escudoSvg(x.escudo || escudoPadrao(x.nome), 34)}
+            <div class="who"><b>${esc(x.nome)}</b><span>${esc(nomeDe(x.jogador_id))}${x.jogador_id === app.user.id ? " · você" : ""}${rod ? ` · rodada ${pts(pontosDoTime(rod.id, x.jogador_id) || 0)}` : ""}</span></div>
+            <span class="val">${pts(x.total)}</span>
+          </li>`).join("")}
+      </ul>
+      <div class="foot"><span>Pontos somados de todas as rodadas</span><span>${plural(encerradas().length, "rodada", "rodadas")}</span></div>`
+      : `<div class="empty">Nenhum time na liga ainda.<br>Cada time aparece quando o jogador abre a aba Cartola.</div>`}
+    </section>`;
+}
+function renderLiga(){
+  view.className = "grid solo wide";
+  const tabela = liga(), ult = ultimaEncerrada(), lider = tabela[0];
+  const destaque = ult ? [...tabela].sort((a, b) => (pontosDoTime(ult.id, b.jogador_id) || 0) - (pontosDoTime(ult.id, a.jogador_id) || 0))[0] : null;
+  const minha = minhaPosicaoLiga();
+  view.innerHTML = `
+    ${heroCartola({
+      status: statusRodada(), titulo: nomeLiga(), sub: `${plural(tabela.length, "time", "times")} · ${plural(encerradas().length, "rodada jogada", "rodadas jogadas")}`,
+      rotulo: "Líder", numero: lider && lider.total ? pts(lider.total) : "–",
+      pill: lider && lider.total ? esc(lider.nome) : "Ninguém pontuou ainda", pillLime: !!(lider && lider.total),
+      meta: lider && lider.total ? `de ${esc(nomeDe(lider.jogador_id))}` : "A tabela começa na primeira rodada encerrada",
+      stats: [[tabela.length, "Times"], [destaque && pontosDoTime(ult.id, destaque.jogador_id) ? pts(pontosDoTime(ult.id, destaque.jogador_id)) : "–", "Melhor da rodada"], [minha ? `${minha}º` : "–", "Sua posição"]]
+    })}
+    ${subnavCartola("liga")}
+    ${destaque && pontosDoTime(ult.id, destaque.jogador_id) ? `
+    <section class="card fade span2" style="animation-delay:.05s">
+      <div class="eyebrow">Rodada ${ult.numero}</div><div class="h2">Destaque da rodada</div>
+      <div class="row" style="margin-top:12px;flex-wrap:nowrap">
+        ${escudoSvg(destaque.escudo || escudoPadrao(destaque.nome), 52)}
+        <div class="who"><b>${esc(destaque.nome)}</b><span>${esc(nomeDe(destaque.jogador_id))}</span></div>
+        <span class="val" style="font-size:26px;font-weight:500">${pts(pontosDoTime(ult.id, destaque.jogador_id))}</span>
+      </div>
+    </section>` : ""}
+    ${cardTabelaLiga(ult)}`;
 }
 
 /* ---------- Meu time (Slide 08) ---------- */
@@ -1069,7 +1195,7 @@ function renderCartola(){
       </a>`;
   const linhas = ["ATA", "MEI", "ZAG", "GOL"].map(p => {
     const doPos = escalados.filter(e => e.posicao === p);
-    return `<div class="linha-campo"><span>${p}</span><div class="vagas">${Array.from({ length: VAGAS[p] }, (_, i) => vaga(p, doPos[i])).join("")}</div></div>`;
+    return `<div class="linha-campo"><span>${p}</span><div class="vagas">${Array.from({ length: vagasDe(t.esquema)[p] }, (_, i) => vaga(p, doPos[i])).join("")}</div></div>`;
   }).join("");
 
   view.innerHTML = `
@@ -1081,14 +1207,19 @@ function renderCartola(){
       stats: [[ptsUlt === null ? "–" : pts(ptsUlt), "Última rodada"], [pts(total), "Pontos no total"], [pos ? `${pos}º` : "–", "Na liga"]]
     })}
     ${subnavCartola("cartola")}
+    ${!t.escudo || state.editarTime ? cardMontarTime(t) : ""}
     <section class="card fade span2" style="animation-delay:.05s">
-      <div class="card-head" style="margin-bottom:6px">
+      <div class="card-head" style="margin-bottom:10px">
         <div><div class="eyebrow">Escalação</div><div class="h2">Meu time</div></div>
-        <span class="pill soft">Esquema 2-2-2</span>
+        <select class="select-pill" data-change="cartEsquema" aria-label="Formação" ${aberto || !r ? "" : "disabled"}>
+          ${ESQUEMAS.map(([k, v]) => `<option value="${k}" ${t.esquema === k ? "selected" : ""}>${k} · ${v}</option>`).join("")}
+        </select>
       </div>
-      ${state.renomear ? `<form data-form="cartNome" class="row" style="margin-bottom:12px">
-          <input class="input" name="nome" value="${esc(t.nome)}" maxlength="40" required><button class="btn sm">Salvar nome</button></form>`
-        : `<p class="note" style="margin:0 0 12px">${esc(t.nome)} · <a class="lnk" data-act="cartRenomear">Renomear</a></p>`}
+      <div class="row" style="margin-bottom:12px;flex-wrap:nowrap">
+        ${escudoSvg(t.escudo || escudoPadrao(t.nome), 36)}
+        <div class="who"><b>${esc(t.nome)}</b><span>${esc(nomeExibido())}${t.escudo ? "" : " · escudo ainda não criado"}</span></div>
+        ${t.escudo && !state.editarTime ? `<a class="lnk" data-act="cartEditarTime">Editar time</a>` : ""}
+      </div>
       <div class="campo">${linhas}</div>
       <p class="hint">${!r ? "O time abre quando o presidente começar a primeira rodada."
         : aberto ? "Toque num jogador para fazer dele o capitão (pontos ×1,5). Vagas vazias levam ao mercado."
@@ -1159,7 +1290,7 @@ function renderListaMerc(){
     .map(m => ({ m, preco: Number(m.preco), meu: escalados.some(e => e.atleta_id === m.jogador_id), ...infoAtleta(m.jogador_id) }))
     .sort((a, b) => ordem(a, b) || nomeDe(a.m.jogador_id).localeCompare(nomeDe(b.m.jogador_id), "pt-BR"));
   const lista = state.mercTodos ? todos : todos.slice(0, 7);
-  const cheio = p => escalados.filter(e => e.posicao === p).length >= VAGAS[p];
+  const cheio = p => escalados.filter(e => e.posicao === p).length >= vagasDe(esquemaAtual())[p];
   el.innerHTML = `
     ${lista.length ? `<ul class="list" style="margin-top:6px">
       ${lista.map(x => {
@@ -1236,21 +1367,7 @@ function renderPontuacao(){
     ${cardClassificacao(rod)}`;
 }
 
-function cardClassificacao(rod){
-  const tabela = liga();
-  return `
-    <section class="card fade" style="animation-delay:.1s">
-      <div class="eyebrow">Liga ${esc(app.pelada.nome)}</div><div class="h2">Classificação</div>
-      ${tabela.length ? `<ul class="rank" style="margin-top:10px">
-        ${tabela.map((x, i) => `
-          <li class="${i < 3 ? "top" : ""} ${x.jogador_id === app.user.id ? "me" : ""}">
-            <span class="pos">${i + 1}</span>
-            <div class="who"><b>${esc(x.nome)}</b><span>${esc(nomeDe(x.jogador_id))}${x.jogador_id === app.user.id ? " · você" : ""} · rodada ${pts(pontosDoTime(rod.id, x.jogador_id) || 0)}</span></div>
-            <span class="val">${pts(x.total)}</span>
-          </li>`).join("")}
-      </ul>` : `<div class="empty">Nenhum time na liga ainda.</div>`}
-    </section>`;
-}
+const cardClassificacao = rod => cardTabelaLiga(rod);
 
 // developer: pontos de todos os jogadores da rodada, sem time próprio
 function renderPontuacaoGeral(enc){
@@ -1312,7 +1429,7 @@ function renderRegras(){
     <li><span class="cod">${r.codigo}</span><div class="who"><b>${esc(r.nome)}</b>${sub(r) ? `<span>${sub(r)}</span>` : ""}</div>
       <span class="${r.pontos < 0 ? "val-neg" : "val-pos"}">${sinal(Number(r.pontos))}</span></li>`).join("")}</ul>`;
   const passos = [
-    ["Escale 7 jogadores", "1 goleiro, 2 zagueiros, 2 meias e 2 atacantes, dentro do seu saldo de cartoletas."],
+    ["Escale 7 jogadores", "1 goleiro e 6 na linha, numa das 3 formações: 2-2-2 (equilibrado), 3-2-1 (defensivo) ou 2-1-3 (ofensivo). Tudo dentro do seu saldo de cartoletas."],
     ["Escolha o capitão", "A pontuação dele vale 1,5×. Dá pra trocar até o mercado fechar."],
     ["Mercado fecha antes da pelada", `${cap(DIAS[app.pelada.cartola_dia])} às ${app.pelada.cartola_hora}h ninguém compra nem vende mais.`],
     ["Organizador lança os scouts", "Depois do jogo, o adm registra gols, assistências, defesas e cartões."],
@@ -1462,6 +1579,8 @@ function cardCartolaAdmin(){
         <button class="switch ${P.cartola_ativo ? "on" : ""}" data-act="cartAtivo" role="switch" aria-checked="${P.cartola_ativo}" aria-label="Cartola ligado"></button>
       </div>
       <div class="two">
+        <div class="field" style="grid-column:1/-1"><span>Nome da liga</span>
+          <form data-form="ligaNome" class="row"><input class="input" name="nome" maxlength="40" value="${esc(P.cartola_liga_nome || "")}" placeholder="Liga ${esc(P.nome)}" aria-label="Nome da liga"><button class="btn sm">Salvar</button></form></div>
         <label class="field"><span>Mercado fecha</span>
           <select class="input" data-change="cartDia">${DIAS.map((d, i) => `<option value="${i}" ${P.cartola_dia === i ? "selected" : ""}>${cap(d)}</option>`).join("")}</select></label>
         <label class="field"><span>Horário</span>
@@ -2106,6 +2225,9 @@ const ACOES = {
   }),
   cartVaga: el => { state.mercPos = el.dataset.pos; state.mercTodos = false; location.hash = "mercado"; },
   cartRenomear: () => { state.renomear = !state.renomear; route(true); },
+  cartEditarTime: () => { state.editarTime = !state.editarTime; state.formTime = null; route(true); },
+  timeOpcao: el => { state.formTime[el.dataset.campo] = el.dataset.valor; el.parentElement.querySelectorAll("button").forEach(b => b.classList.toggle("on", b === el)); atualizarPreviewTime(); },
+  timeCor: el => { state.formTime[el.dataset.campo] = el.dataset.valor; el.parentElement.querySelectorAll("button").forEach(b => b.classList.toggle("on", b === el)); atualizarPreviewTime(); },
   mercPos: el => { state.mercPos = el.dataset.valor; route(true); },
   mercTodos: () => { state.mercTodos = !state.mercTodos; renderListaMerc(); },
   cartFaq: el => { const i = Number(el.dataset.i); state.faq = state.faq === i ? null : i; route(true); },
@@ -2183,6 +2305,11 @@ const MUDANCAS = {
     await carregarCartola(); route(true);
     aviso("Partida da rodada definida");
   }),
+  cartEsquema: el => run(async () => {
+    try { ok(await sb.rpc("cartola_esquema", { p: app.pelada.id, esquema_: el.value })); }
+    finally { await carregarCartola(); route(true); }
+    aviso(`Formação ${el.value}`);
+  }),
   cartDia: el => run(async () => { await salvarPelada({ cartola_dia: Number(el.value) }); route(true); }),
   cartHora: el => run(async () => { await salvarPelada({ cartola_hora: Number(el.value) }); route(true); })
 };
@@ -2192,6 +2319,8 @@ const INPUTS = {
   buscaJog: el => { state.buscaJog = el.value; renderListaJog(); },
   buscaUsu: el => { state.buscaUsu = el.value; renderListaUsu(); },
   mercBusca: el => { state.mercBusca = el.value; renderListaMerc(); },
+  timeNome: el => { state.formTime.nome = el.value; atualizarPreviewTime(); },
+  timeSigla: el => { state.formTime.sigla = el.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3); atualizarPreviewTime(); },
   pesoAoVivo: el => { document.getElementById("pesoLegenda").innerHTML = `<b>Votação ${el.value}%</b><span>Desempenho ${100 - el.value}%</span>`; }
 };
 
@@ -2325,6 +2454,21 @@ const FORMS = {
       { onConflict: "rodada_id,atleta_id,codigo" }));
     await carregarCartola(); route(true);
     aviso(`${codigo} ×${qtd} para ${nomeDe(atleta)}`);
+  }),
+  cartTime: (f, d) => run(async () => {
+    const t = state.formTime;
+    const sigla = (d.get("sigla") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
+    if (!sigla) throw new Error("Coloque uma sigla de 1 a 3 letras");
+    ok(await sb.rpc("cartola_personalizar", { p: app.pelada.id, nome_: d.get("nome").trim(),
+      escudo_: { forma: t.forma, padrao: t.padrao, cor1: t.cor1, cor2: t.cor2, sigla } }));
+    const novo = !cart().meuTime.escudo;
+    state.editarTime = false; state.formTime = null;
+    await carregarCartola(); route(true);
+    aviso(novo ? "Time criado! Agora escale seus jogadores." : "Time salvo");
+  }),
+  ligaNome: (f, d) => run(async () => {
+    await salvarPelada({ cartola_liga_nome: d.get("nome").trim() || null });
+    route(true);
   }),
   cartPonto: (f, d) => run(async () => {
     const cod = f.dataset.cod, valor = Math.round(Number(d.get("pontos")) * 10) / 10;
