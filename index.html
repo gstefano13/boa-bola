@@ -7,6 +7,11 @@
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#F4F4F4">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Anotou">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -330,7 +335,9 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
    ========================================================= */
 const SUPABASE_URL = "https://rsqyxsjqdkgkcwexbkfi.supabase.co";
 const SUPABASE_KEY = "sb_publishable_VsGcdzuHKXG3cVMuBact2g_VnTJEFgB";
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+});
 
 /* ===================== ESTADO =====================
    3 níveis de acesso:
@@ -500,6 +507,7 @@ const gravar = (k, v) => { try { v == null ? localStorage.removeItem("anotou." +
 /* ===================== DADOS ===================== */
 async function entrar(user){
   app.user = user;
+  gravar("email", user.email);
   await run(async () => {
     const [perfil, devs, config] = (await Promise.all([
       sb.from("jogadores").select("*").eq("id", user.id).single(),
@@ -780,6 +788,36 @@ function inserirPatrocinio(){
   alvo.insertAdjacentHTML("afterend", cardPatrocinio());
 }
 
+/* ===================== INSTALAR NA TELA INICIAL =====================
+   Instalado, o Anotou abre como app e fica sempre logado (no iPhone, o Safari
+   apaga os dados de sites que ficam 7 dias sem visita; app instalado não). */
+let pedidoInstalar = null;
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); pedidoInstalar = e; if (app.user && app.pelada && !app.modoDev) route(true); });
+window.addEventListener("appinstalled", () => { pedidoInstalar = null; gravar("instalado", "1"); });
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+const instalado = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true || ler("instalado") === "1";
+const ehIphone = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const ehCelular = () => ehIphone() || /android/i.test(navigator.userAgent);
+function cardInstalar(){
+  if (instalado() || !ehCelular() || Date.now() < Number(ler("instalarDepois") || 0)) return "";
+  const passos = ehIphone()
+    ? `<p class="note">No Safari, toque em <b>Compartilhar</b> <span aria-hidden="true">⬆︎</span> e depois em <b>Adicionar à Tela de Início</b>.</p>`
+    : pedidoInstalar ? "" : `<p class="note">No Chrome, toque nos <b>três pontinhos ⋮</b> e depois em <b>Instalar app</b> (ou "Adicionar à tela inicial").</p>`;
+  return `
+    <section class="card fade span2">
+      <div class="card-head" style="margin-bottom:6px">
+        <div><div class="eyebrow">Dica</div><div class="h2">Instale o Anotou no celular</div></div>
+        <img src="icon-192.png" alt="" width="44" height="44" style="border-radius:12px;flex:none">
+      </div>
+      <p class="note">Ele abre direto, como um app, e você fica sempre logado.</p>
+      ${passos}
+      <div class="row" style="margin-top:12px">
+        ${pedidoInstalar ? `<button class="btn sm" data-act="instalar">Instalar agora</button>` : ""}
+        <button class="btn ghost sm" data-act="instalarDepois">Agora não</button>
+      </div>
+    </section>`;
+}
+
 /* ===================== INÍCIO DO JOGADOR (Slide 01) ===================== */
 function renderInicio(){
   const me = meusNumeros();
@@ -792,6 +830,7 @@ function renderInicio(){
   view.innerHTML = `
     <section class="hero fade" id="hero"></section>
     ${cardLista()}
+    ${cardInstalar()}
     <section class="card fade" id="boot" style="animation-delay:.05s"></section>
     <section class="card fade" id="trend" style="animation-delay:.1s"></section>
     <section class="card fade" id="ranking" style="animation-delay:.15s"></section>`;
@@ -2511,6 +2550,15 @@ const ACOES = {
   }),
   fecharModal: () => { state.modal = null; renderModal(); route(true); },
   nada: () => {},
+  instalar: async () => {
+    if (!pedidoInstalar) return;
+    pedidoInstalar.prompt();
+    const { outcome } = await pedidoInstalar.userChoice;
+    pedidoInstalar = null;
+    if (outcome === "accepted") { gravar("instalado", "1"); aviso("Anotou instalado!"); }
+    route(true);
+  },
+  instalarDepois: () => { gravar("instalarDepois", String(Date.now() + 14 * 864e5)); route(true); },
   minhaPosicao: el => run(async () => {
     ok(await sb.rpc("definir_minha_posicao", { p: app.pelada.id, pos: el.dataset.valor }));
     app.membro.posicao = el.dataset.valor;
@@ -2921,7 +2969,8 @@ sb.auth.onAuthStateChange((evento, session) => {
     if (session && (!app.user || app.user.id !== session.user.id)) entrar(session.user);
     else if (!session && (app.user || evento === "INITIAL_SESSION")) {
       Object.assign(app, vazio());
-      state.login = ler("convite") ? "codigo" : state.login;
+      state.login = ler("convite") ? "codigo" : ler("email") ? "senha" : state.login;
+      if (!state.loginEmail) state.loginEmail = ler("email") || "";
       route();
     }
   }, 0);
