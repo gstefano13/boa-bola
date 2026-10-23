@@ -267,6 +267,24 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .nav a.on{background:var(--lime);color:var(--ink)}
 .nav svg{width:20px;height:20px}
 
+/* lista de confirmação e popups */
+.prazo{display:flex;gap:10px;align-items:flex-start;background:var(--lime-tint);border:1px solid #E2F4BE;border-radius:var(--r-md);padding:12px 14px;margin-top:14px;font-size:13px;line-height:1.4}
+.prazo svg{width:18px;height:18px;flex:none;margin-top:1px}
+.prazo b{font-weight:600}
+.prazo.off{background:var(--soft);border-color:var(--line);color:var(--ink-2)}
+.eu-lista{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:14px}
+.lista-sub{font-size:13px;font-weight:600;margin:18px 0 2px;display:flex;justify-content:space-between;color:var(--ink)}
+.lista-sub span{font-weight:400;color:var(--ink-3)}
+.modal{position:fixed;inset:0;z-index:40;background:rgba(14,14,14,.45);display:flex;align-items:flex-end;justify-content:center;padding:12px;animation:fadein .2s ease both}
+.modal:empty{display:none}
+.sheet{background:var(--card);border-radius:20px;padding:22px;width:100%;max-width:460px;max-height:calc(100dvh - 24px);overflow:auto;box-shadow:0 20px 50px -20px rgba(0,0,0,.45);animation:sobe .25s ease both}
+.sheet .x{float:right;width:32px;height:32px;border-radius:50%;background:var(--soft);font-size:18px;line-height:1;color:var(--ink-2)}
+.sheet .dois{margin-top:16px}
+.sheet .list{margin-top:8px}
+@media(min-width:700px){.modal{align-items:center}}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+@keyframes sobe{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
+
 .fade{animation:fade .5s ease both}
 @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.fade{animation:none}}
@@ -287,6 +305,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 </div>
 
 <div class="toast" id="toast" role="status"></div>
+<div class="modal" id="modal" data-act="fecharModal"></div>
 <nav class="nav" id="nav" aria-label="Navegação"></nav>
 
 <script>
@@ -306,13 +325,13 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
    - jogador: vê os próprios números, vota e acompanha os rankings */
 const vazio = () => ({ user: null, perfil: null, dev: false, modoDev: false, patrocinio: {},
   peladas: [], todas: [], membrosTodas: [], usuarios: [], global: null,
-  pelada: null, membro: null, membros: [], partidas: [], gols: [], presencas: [], lances: [], medias: [], meusVotos: [], emails: new Map() });
+  pelada: null, membro: null, membros: [], partidas: [], gols: [], presencas: [], lances: [], medias: [], meusVotos: [], emails: new Map(), jogo: null, lista: [], confirmacoes: [] });
 const app = vazio();
 const state = { periodo: "mes", stat: "gols", login: "codigo", loginEmail: "", loginPelada: "", partida: null,
   busca: "", filtro: "todas", verTodas: false, novaPelada: false, buscaUsu: "",
   buscaJog: "", filtroJog: "todos", verTodosJog: false, editando: null, addJogador: false, editMetrica: null,
   mercPos: "todos", mercBusca: "", mercOrdem: "media", mercTodos: false, pontRodada: null, faq: 0, renomear: false,
-  capitao: null, capitaoRodada: undefined, confirmEncerrar: false, editScout: null, ajustesAbertos: false, editarTime: false, formTime: null };
+  capitao: null, capitaoRodada: undefined, confirmEncerrar: false, editScout: null, ajustesAbertos: false, editarTime: false, formTime: null, modal: null, modalVisto: false, votarIds: [] };
 
 /* ===================== REGRAS ===================== */
 const CHUTEIRAS = [
@@ -429,7 +448,7 @@ function potes(offset = 0){
 
 function minhaSerie(){
   if (app.pelada.metodo === "organizador") return [];
-  return app.partidas
+  return app.partidas.filter(p => p.data <= hoje())
     .map(p => ({ semana: p.data, s: avaliar(new Set([p.id])).get(app.user.id) }))
     .filter(x => x.s != null)
     .map(x => ({ semana: x.semana, media: 1 + 5 * x.s }));
@@ -545,6 +564,7 @@ async function carregar(){
     sb.from("perfis_pendentes").select("jogador_id, email")   // só dev e presidente recebem
   ])).map(ok);
   Object.assign(app, { membros, partidas, gols, presencas, lances, medias, meusVotos });
+  await carregarLista();
   app.emails = new Map(pendentes.map(x => [x.jogador_id, x.email]));
   app.pelada = { ...pelada, papel: app.pelada.papel, sufixo: codPres.length ? codPres[0].sufixo : null };
   app.membro = membroDe(app.user.id);
@@ -554,6 +574,18 @@ async function carregar(){
     return;
   }
   await carregarCartola();
+}
+
+async function carregarLista(){
+  const p = app.pelada.id;
+  app.jogo = ok(await sb.rpc("proximo_jogo", { p }))[0] || null;
+  app.lista = []; app.confirmacoes = [];
+  if (!app.jogo) return;
+  const [lista, conf] = (await Promise.all([
+    sb.rpc("lista_do_jogo", { p, d: app.jogo.data }),
+    sb.from("confirmacoes").select("jogador_id, vou, criado_em").eq("pelada_id", p).eq("data", app.jogo.data)
+  ])).map(ok);
+  Object.assign(app, { lista, confirmacoes: conf });
 }
 
 function meusNumeros(){
@@ -629,6 +661,8 @@ function route(manterScroll){
   nav.innerHTML = itens.map(([k, rotulo, ico]) =>
     `<a href="#${k}" class="${k === v ? "on" : ""}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${ICONES[ico]}</svg>${rotulo}</a>`).join("");
   inserirPatrocinio();
+  renderModal();
+  popupAutomatico();
   if (!manterScroll) window.scrollTo(0, 0);
 }
 window.addEventListener("hashchange", () => { if (!location.hash.startsWith("#convite=")) route(); });
@@ -736,6 +770,7 @@ function renderInicio(){
 
   view.innerHTML = `
     <section class="hero fade" id="hero"></section>
+    ${cardLista()}
     <section class="card fade" id="boot" style="animation-delay:.05s"></section>
     <section class="card fade" id="trend" style="animation-delay:.1s"></section>
     <section class="card fade" id="ranking" style="animation-delay:.15s"></section>`;
@@ -1624,37 +1659,10 @@ function cardCartolaAdmin(){
 /* ===================== JOGADORES (votação) ===================== */
 function renderJogadores(){
   const id = app.user.id;
-  const votam = ["votacao", "misto"].includes(app.pelada.metodo);
-  const minhas = new Set(app.presencas.filter(p => p.jogador_id === id).map(p => p.partida_id));
-  const partida = [...app.partidas].reverse().find(p => minhas.has(p.id));
   const tabela = potes();
-  let votacao;
-  if (!votam) {
-    votacao = `<div class="empty">Nessa pelada o pote é definido ${app.pelada.metodo === "organizador" ? "pelo organizador" : "pelo desempenho"},<br>então não tem votação.</div>`;
-  } else if (!partida) {
-    votacao = `<div class="empty">Quando o presidente marcar que você jogou uma partida,<br>a votação dela aparece aqui.</div>`;
-  } else {
-    const colegas = app.presencas.filter(p => p.partida_id === partida.id && p.jogador_id !== id).map(p => p.jogador_id);
-    const notaDe = vid => (app.meusVotos.find(v => v.partida_id === partida.id && v.votado_id === vid) || {}).nota;
-    const faltam = colegas.filter(vid => !notaDe(vid)).length;
-    votacao = `
-      <p class="note">${dataLonga(partida.data)} · ${faltam ? `falta${faltam>1?"m":""} ${plural(faltam, "voto", "votos")}` : "todos votados ✓"}<br>
-      Dê de 1 a 6: <b>6 = jogou muito</b>. Seu voto é secreto.</p>
-      ${colegas.length ? `<ul class="list" style="margin-top:8px">
-        ${colegas.map(vid => `
-          <li>
-            ${avatarDe(vid)}
-            <div class="who"><b>${esc(nomeDe(vid))}</b><span>${notaDe(vid) ? "Votado" : "Falta votar"}</span></div>
-            <div class="notas">${[1,2,3,4,5,6].map(n => `<button class="${notaDe(vid)===n?"on":""}" data-act="votar" data-partida="${partida.id}" data-jogador="${vid}" data-nota="${n}" aria-label="Nota ${n}">${n}</button>`).join("")}</div>
-          </li>`).join("")}
-      </ul>` : `<div class="empty">Ninguém mais foi marcado nessa partida.</div>`}`;
-  }
   const geral = rankingDe("geral");
   view.innerHTML = `
-    <section class="card fade">
-      <div class="card-head"><div><div class="eyebrow">Votação</div><div class="h2">Como a galera jogou?</div></div></div>
-      ${votacao}
-    </section>
+    ${cardLista()}
     <section class="card fade" style="animation-delay:.05s">
       <div class="card-head"><div><div class="eyebrow">Elenco</div><div class="h2">${plural(app.membros.length, "jogador", "jogadores")}</div></div></div>
       <ul class="list">
@@ -1671,6 +1679,133 @@ function renderJogadores(){
     </section>`;
 }
 
+/* ===================== LISTA DE CONFIRMAÇÃO =====================
+   Abre 3 dias antes do jogo e fecha 2 horas antes (regras no banco, migração 012).
+   Mensalista entra direto; avulso espera vaga. Quem está na lista avalia os outros da lista. */
+const mensalistas = () => app.membros.filter(m => m.tipo === "mensalista").length;
+const momento = t => { const d = new Date(t), m = String(d.getMinutes()).padStart(2, "0"); return `${DIAS[d.getDay()]}, ${dataCurta(iso(d))} às ${d.getHours()}h${m !== "00" ? m : ""}`; };
+function listaStatus(){
+  const j = app.jogo, agora = new Date();
+  return !j ? "sem" : agora < new Date(j.abre) ? "antes" : agora < new Date(j.fecha) ? "aberta" : "fechada";
+}
+const situacaoDe = id => (app.lista.find(l => l.jogador_id === id) || {}).situacao || "fora";
+const confDe = id => app.confirmacoes.find(c => c.jogador_id === id);
+const porChegada = (a, b) => new Date(confDe(a).criado_em) - new Date(confDe(b).criado_em);
+const naLista = () => app.lista.filter(l => l.situacao === "confirmado").map(l => l.jogador_id).sort(porChegada);
+const naEspera = () => app.lista.filter(l => l.situacao === "espera").sort((a, b) => a.ordem - b.ordem).map(l => l.jogador_id);
+const partidaDoJogo = () => app.jogo && app.partidas.find(p => p.data === app.jogo.data);
+const notaMinha = vid => { const pa = partidaDoJogo(); return pa && (app.meusVotos.find(v => v.partida_id === pa.id && v.votado_id === vid) || {}).nota; };
+const faltaVotar = () => situacaoDe(app.user.id) === "confirmado" ? naLista().filter(id => id !== app.user.id && !notaMinha(id)) : [];
+const RELOGIO = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
+function textoPrazo(){
+  const j = app.jogo, s = listaStatus();
+  if (s === "antes") return `A lista abre <b>${momento(j.abre)}</b> · faltam ${faltaTempo(j.abre)}`;
+  if (s === "aberta") return `Confirmação e votação fecham <b>${momento(j.fecha)}</b> · faltam ${faltaTempo(j.fecha)}`;
+  return `Lista fechada · o jogo é <b>${momento(j.inicio)}</b>`;
+}
+function linhaLista(id, i, espera){
+  const m = membroDe(id);
+  return `<li>
+    <span class="num${espera ? "" : " lime"}">${i + 1}</span>
+    ${avatarDe(id)}
+    <div class="who"><b>${esc(nomeDe(id))}${id === app.user.id ? " · você" : ""}</b><span>${m ? cap(m.tipo) : ""}</span></div>
+    ${!espera && id !== app.user.id && situacaoDe(app.user.id) === "confirmado" ? `<span class="pill ${notaMinha(id) ? "soft" : "off"}">${notaMinha(id) ? `Nota ${notaMinha(id)}` : "Falta votar"}</span>` : ""}
+  </li>`;
+}
+function cardLista(){
+  const j = app.jogo, s = listaStatus(), eu = app.user.id;
+  if (!j) return souPresidente() ? `
+    <section class="card fade">
+      <div class="eyebrow">Lista da pelada</div><div class="h2">Defina o dia e o horário</div>
+      <p class="note">Com o dia e o horário salvos em "Dados da pelada", a lista de confirmação abre sozinha 3 dias antes de cada jogo.</p>
+    </section>` : "";
+  const lista = naLista(), espera = naEspera(), minha = situacaoDe(eu), resp = confDe(eu);
+  const vagas = app.pelada.vagas || mensalistas();
+  const semResposta = app.membros.filter(m => m.tipo === "mensalista" && !confDe(m.jogador_id)).length;
+  const faltam = faltaVotar().length;
+  let meu = "";
+  if (app.membro && s === "aberta") {
+    if (!resp) meu = `<div class="eu-lista"><span class="note" style="margin:0">Você ainda não respondeu.</span>
+      <div class="row"><button class="btn ghost sm" data-act="confirmar" data-vou="0">Não vou</button><button class="btn sm" data-act="abrirConfirmar">Confirmar</button></div></div>`;
+    else if (minha === "confirmado") meu = `<div class="eu-lista"><span class="pill lime">✓ Você está na lista</span>
+      <div class="row"><button class="btn ghost sm" data-act="confirmar" data-vou="0">Não vou mais</button>
+      <button class="btn sm" data-act="abrirVotacao">${faltam ? `Votar · faltam ${faltam}` : "Ver meus votos"}</button></div></div>`;
+    else if (minha === "espera") meu = `<div class="eu-lista"><span class="pill soft">Lista de espera · ${espera.indexOf(eu) + 1}º</span>
+      <button class="btn ghost sm" data-act="confirmar" data-vou="0">Desistir</button></div>
+      <p class="hint">Você sobe se sobrar vaga de mensalista.</p>`;
+    else meu = `<div class="eu-lista"><span class="pill off">Você disse que não vai</span>
+      <button class="btn sm" data-act="confirmar" data-vou="1">Vou, sim</button></div>`;
+  } else if (app.membro && s === "fechada" && minha !== "fora") {
+    meu = `<div class="eu-lista"><span class="pill ${minha === "confirmado" ? "lime" : "soft"}">${minha === "confirmado" ? "✓ Você joga" : "Ficou na espera"}</span></div>`;
+  }
+  return `
+    <section class="card fade span2" id="lista">
+      <div class="card-head" style="margin-bottom:0">
+        <div><div class="eyebrow">Lista da pelada · ${cap(DIAS[new Date(j.inicio).getDay()])} ${dataCurta(j.data)}</div><div class="h2">${s === "antes" ? "Lista ainda fechada" : `${plural(lista.length, "confirmado", "confirmados")}`}</div></div>
+        <span class="pill soft">${vagas} vagas</span>
+      </div>
+      <div class="prazo${s === "aberta" ? "" : " off"}">${RELOGIO}<div>${textoPrazo()}</div></div>
+      ${meu}
+      ${s !== "antes" ? `
+        ${lista.length ? `<ul class="list" style="margin-top:6px">${lista.map((id, i) => linhaLista(id, i)).join("")}</ul>` : `<div class="empty">Ninguém confirmou ainda.</div>`}
+        ${espera.length ? `<div class="lista-sub">Lista de espera <span>sobem se sobrar vaga</span></div>
+          <ul class="list">${espera.map((id, i) => linhaLista(id, i, true)).join("")}</ul>` : ""}
+        ${s === "aberta" && semResposta ? `<p class="hint" style="margin-top:12px">${plural(semResposta, "mensalista ainda não respondeu", "mensalistas ainda não responderam")}. A vaga deles fica guardada até a lista fechar.</p>` : ""}` : ""}
+    </section>`;
+}
+
+function popupAutomatico(){
+  if (!app.user || app.modoDev || !app.pelada || !app.membro || state.modalVisto || state.modal) return;
+  if (listaStatus() !== "aberta") return;
+  if (!confDe(app.user.id)) state.modal = "confirmar";
+  else if (faltaVotar().length) { state.votarIds = faltaVotar(); state.modal = "votar"; }
+  if (state.modal) { state.modalVisto = true; renderModal(); }
+}
+
+function renderModal(){
+  const el = document.getElementById("modal");
+  const t = state.modal, j = app.jogo;
+  if (!t || !j || !app.pelada) { el.innerHTML = ""; return; }
+  const fechar = `<button class="x" data-act="fecharModal" aria-label="Fechar">×</button>`;
+  const prazo = `<div class="prazo">${RELOGIO}<div>${textoPrazo()}</div></div>`;
+  let corpo;
+  if (t === "confirmar") {
+    const avulso = app.membro.tipo !== "mensalista";
+    corpo = `${fechar}
+      <div class="eyebrow">Lista aberta · ${plural(naLista().length, "confirmado", "confirmados")}</div>
+      <div class="h2">Vai na pelada de ${DIAS[new Date(j.inicio).getDay()]}?</div>
+      <p class="note">${esc(momento(j.inicio))}${app.pelada.local ? ` · ${esc(app.pelada.local)}` : ""}</p>
+      ${prazo}
+      <p class="note" style="margin-top:12px">${avulso ? "Você é avulso: entra na lista de espera e sobe se sobrar vaga de mensalista." : "Você é mensalista: confirmou, está na lista."}
+      Depois de confirmar, você avalia quem já está na lista.</p>
+      <div class="dois"><button class="btn ghost" data-act="confirmar" data-vou="0">Não vou</button><button class="btn" data-act="confirmar" data-vou="1">Vou</button></div>`;
+  } else if (t === "espera") {
+    const pos = naEspera().indexOf(app.user.id) + 1;
+    corpo = `${fechar}
+      <div class="eyebrow">Lista de espera</div>
+      <div class="h2">Você é o ${pos}º da espera</div>
+      <p class="note">Se um mensalista não confirmar, você sobe pra lista. Quando subir, a votação abre pra você aqui.</p>
+      ${prazo}
+      <button class="btn block" data-act="fecharModal">Entendi</button>`;
+  } else {
+    const ids = state.votarIds.filter(id => situacaoDe(id) === "confirmado");
+    const faltam = ids.filter(id => !notaMinha(id)).length;
+    corpo = `${fechar}
+      <div class="eyebrow">Votação · ${faltam ? `falta${faltam > 1 ? "m" : ""} ${faltam}` : "tudo votado ✓"}</div>
+      <div class="h2">Avalie quem está na lista</div>
+      <p class="note">De 1 a 6: <b>6 = joga muito</b>. Seu voto é secreto e dá pra mudar até a lista fechar.</p>
+      ${prazo}
+      ${ids.length ? `<ul class="list">${ids.map(vid => `
+        <li>
+          ${avatarDe(vid)}
+          <div class="who"><b>${esc(nomeDe(vid))}</b><span>${notaMinha(vid) ? "Votado" : "Falta votar"}</span></div>
+          <div class="notas">${[1,2,3,4,5,6].map(n => `<button class="${notaMinha(vid) === n ? "on" : ""}" data-act="votarLista" data-jogador="${vid}" data-nota="${n}" aria-label="Nota ${n} para ${esc(nomeDe(vid))}">${n}</button>`).join("")}</div>
+        </li>`).join("")}</ul>` : `<div class="empty">Ninguém pra avaliar ainda.<br>Quando mais gente confirmar, a votação abre de novo.</div>`}
+      <button class="btn block" data-act="fecharModal">${faltam ? "Votar depois" : "Pronto"}</button>`;
+  }
+  el.innerHTML = `<div class="sheet" data-act="nada" role="dialog" aria-modal="true">${corpo}</div>`;
+}
+
 /* ===================== PELADA ===================== */
 function renderPelada(){
   if (souPresidente()) return renderPeladaAdmin();
@@ -1678,6 +1813,7 @@ function renderPelada(){
   const tabela = potes();
   view.innerHTML = `
     ${heroPelada()}
+    ${cardLista()}
     <section class="card fade" style="animation-delay:.05s">
       <div class="card-head"><div><div class="eyebrow">Elenco</div><div class="h2">Jogadores</div></div></div>
       <ul class="list">
@@ -1702,7 +1838,8 @@ function heroPelada(){
   const p = app.pelada, mes = mesAtual();
   const mens = app.membros.filter(m => m.tipo === "mensalista").length;
   const novos = app.membros.filter(m => (m.entrou_em || "").startsWith(mes)).length;
-  const vagas = app.partidas.length * app.membros.length;
+  const jogadas = app.partidas.filter(x => x.data <= hoje());
+  const vagas = jogadas.length * app.membros.length;
   const presenca = vagas ? Math.round((app.presencas.length / vagas) * 100) + "%" : "–";
   const topo = app.modoDev ? `<a href="#peladas">← Peladas</a> · Código ${esc(p.codigo_convite)}`
     : souPresidente() ? `✓ Presidente · Código ${esc(p.codigo_convite)}`
@@ -1721,7 +1858,7 @@ function heroPelada(){
         </div>
       </div>
       <div class="hero-stats">
-        <div><b>${app.partidas.length}</b><span>Jogos</span></div>
+        <div><b>${jogadas.length}</b><span>Jogos</span></div>
         <div><b>${p.janela_semanas} sem.</b><span>Janela do pote</span></div>
         <div><b>${presenca}</b><span>Presença</span></div>
       </div>
@@ -1733,6 +1870,7 @@ function renderPeladaAdmin(){
   view.className = "grid solo wide";
   view.innerHTML = `
     ${heroPelada()}
+    ${cardLista()}
     ${cardPartidas()}
     ${cardCartolaAdmin()}
     ${app.pelada.cartola_ativo ? cardCartolaScouts() : ""}
@@ -1751,10 +1889,15 @@ function cardDados(){
       <form data-form="dados">
         <label class="field"><span>Nome da pelada</span><input class="input" name="nome" value="${esc(p.nome)}" required></label>
         <div class="two">
-          <label class="field"><span>Dia</span><input class="input" name="dia" value="${esc(p.dia_semana || "")}" placeholder="Segunda"></label>
+          <label class="field"><span>Dia</span><select class="input" name="dia">
+            <option value="">Sem dia fixo</option>
+            ${DIAS.map(d => `<option value="${cap(d)}" ${(p.dia_semana || "").toLowerCase().slice(0, 3) === d.slice(0, 3) ? "selected" : ""}>${cap(d)}</option>`).join("")}
+          </select></label>
           <label class="field"><span>Horário</span><input class="input" name="horario" value="${esc(p.horario || "")}" placeholder="20:00"></label>
         </div>
         <label class="field"><span>Local</span><input class="input" name="local" value="${esc(p.local || "")}" placeholder="Society Barra, quadra 2"></label>
+        <label class="field"><span>Vagas por jogo</span><input class="input" name="vagas" type="number" min="2" max="60" value="${p.vagas ?? ""}" placeholder="${mensalistas()} (o número de mensalistas)">
+          <div class="hint">A lista abre 3 dias antes do jogo e fecha 2 horas antes. Mensalista entra direto; avulso fica na espera e sobe quando sobra vaga.</div></label>
         ${app.modoDev ? `<label class="field"><span>Status</span>
           <select class="input" name="status">${Object.entries(STATUS).map(([k,v]) => `<option value="${k}" ${p.status===k?"selected":""}>${v}</option>`).join("")}</select></label>` : ""}
         <div class="field"><span>Código de acesso</span>
@@ -2152,13 +2295,35 @@ const ACOES = {
     aviso(`Novo código do presidente: ${app.pelada.codigo_convite}-${app.pelada.sufixo}`);
     route();
   }),
-  votar: el => run(async () => {
-    const voto = { pelada_id: app.pelada.id, partida_id: el.dataset.partida, votante_id: app.user.id, votado_id: el.dataset.jogador, nota: Number(el.dataset.nota) };
-    ok(await sb.from("votos").upsert(voto, { onConflict: "partida_id,votante_id,votado_id" }));
-    app.meusVotos = app.meusVotos.filter(v => !(v.partida_id === voto.partida_id && v.votado_id === voto.votado_id)).concat(voto);
-    renderJogadores();
-    inserirPatrocinio();
+  confirmar: el => run(async () => {
+    const vou = el.dataset.vou === "1";
+    ok(await sb.rpc("confirmar_presenca", { p: app.pelada.id, vou_: vou }));
+    await carregar();
+    const s = situacaoDe(app.user.id);
+    if (vou && s === "confirmado") {
+      state.votarIds = faltaVotar();
+      state.modal = state.votarIds.length ? "votar" : null;
+      aviso(state.votarIds.length ? "Confirmado! Agora avalie quem já está na lista." : "Confirmado! Você é o primeiro da lista.");
+    } else if (vou) state.modal = "espera";
+    else { state.modal = null; aviso("Ok, você ficou fora dessa."); }
+    route(true);
   }),
+  abrirConfirmar: () => { state.modal = "confirmar"; renderModal(); },
+  abrirVotacao: () => {
+    const outros = naLista().filter(id => id !== app.user.id);
+    state.votarIds = [...outros.filter(id => !notaMinha(id)), ...outros.filter(id => notaMinha(id))];
+    state.modal = "votar";
+    renderModal();
+  },
+  votarLista: el => run(async () => {
+    const votado = el.dataset.jogador, nota = Number(el.dataset.nota);
+    ok(await sb.rpc("votar_na_lista", { p: app.pelada.id, votado, nota_: nota }));
+    const pa = partidaDoJogo();
+    app.meusVotos = app.meusVotos.filter(v => !(v.partida_id === pa.id && v.votado_id === votado)).concat({ partida_id: pa.id, votado_id: votado, nota });
+    renderModal();
+  }),
+  fecharModal: () => { state.modal = null; renderModal(); route(true); },
+  nada: () => {},
   apagarGol: el => run(async () => { ok(await sb.from("gols").delete().eq("id", el.dataset.id)); await recarregar(); }),
   apagarLance: el => run(async () => {
     const q = Number(el.dataset.qtd);
@@ -2391,9 +2556,10 @@ const FORMS = {
   }),
   dados: (f, d) => run(async () => {
     const campos = { nome: d.get("nome").trim(), dia_semana: d.get("dia").trim() || null,
-      horario: d.get("horario").trim() || null, local: d.get("local").trim() || null };
+      horario: d.get("horario").trim() || null, local: d.get("local").trim() || null, vagas: d.get("vagas") ? Number(d.get("vagas")) : null };
     if (app.modoDev) campos.status = d.get("status");
     await salvarPelada(campos);
+    await carregarLista();
     route();
   }),
   metrica: (f, d) => run(async () => {
@@ -2426,7 +2592,8 @@ const FORMS = {
     await recarregar();
   }),
   novaPartida: (f, d) => run(async () => {
-    const nova = ok(await sb.from("partidas").insert({ pelada_id: app.pelada.id, data: d.get("data") }).select("id").single());
+    const nova = app.partidas.find(p => p.data === d.get("data"))
+      || ok(await sb.from("partidas").insert({ pelada_id: app.pelada.id, data: d.get("data") }).select("id").single());
     await carregar();
     state.partida = nova.id;
     route();
