@@ -267,6 +267,20 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .nav a.on{background:var(--lime);color:var(--ink)}
 .nav svg{width:20px;height:20px}
 
+/* times da noite */
+.times-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr))}
+.colete{width:14px;height:14px;border-radius:50%;border:1.5px solid var(--ink);display:inline-block;flex:none}
+.time-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.time-head .h2{display:flex;align-items:center;gap:8px;margin:0}
+.time-card .list li{padding:9px 0}
+.time-card .list li.sel{background:var(--lime-tint);margin:0 -10px;padding:9px 10px;border-radius:var(--r-sm)}
+.time-card.meu{outline:2px solid var(--lime)}
+.placar{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px;margin-top:14px}
+.placar .lado{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;font-weight:600;font-size:15px}
+.placar .gols{font-family:var(--mono);font-size:56px;line-height:1;letter-spacing:-.06em}
+.placar .x{font-family:var(--mono);color:var(--ink-3);font-size:22px}
+.placar .stepper{margin-top:4px}
+
 /* lista de confirmação e popups */
 .prazo{display:flex;gap:10px;align-items:flex-start;background:var(--lime-tint);border:1px solid #E2F4BE;border-radius:var(--r-md);padding:12px 14px;margin-top:14px;font-size:13px;line-height:1.4}
 .prazo svg{width:18px;height:18px;flex:none;margin-top:1px}
@@ -325,13 +339,13 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
    - jogador: vê os próprios números, vota e acompanha os rankings */
 const vazio = () => ({ user: null, perfil: null, dev: false, modoDev: false, patrocinio: {},
   peladas: [], todas: [], membrosTodas: [], usuarios: [], global: null,
-  pelada: null, membro: null, membros: [], partidas: [], gols: [], presencas: [], lances: [], medias: [], meusVotos: [], emails: new Map(), jogo: null, lista: [], confirmacoes: [] });
+  pelada: null, membro: null, membros: [], partidas: [], gols: [], presencas: [], lances: [], medias: [], meusVotos: [], emails: new Map(), jogo: null, lista: [], confirmacoes: [], timesJogo: [], confrontos: [] });
 const app = vazio();
 const state = { periodo: "mes", stat: "gols", login: "codigo", loginEmail: "", loginPelada: "", partida: null,
   busca: "", filtro: "todas", verTodas: false, novaPelada: false, buscaUsu: "",
   buscaJog: "", filtroJog: "todos", verTodosJog: false, editando: null, addJogador: false, editMetrica: null,
   mercPos: "todos", mercBusca: "", mercOrdem: "media", mercTodos: false, pontRodada: null, faq: 0, renomear: false,
-  capitao: null, capitaoRodada: undefined, confirmEncerrar: false, editScout: null, ajustesAbertos: false, editarTime: false, formTime: null, modal: null, modalVisto: false, votarIds: [] };
+  capitao: null, capitaoRodada: undefined, confirmEncerrar: false, editScout: null, ajustesAbertos: false, editarTime: false, formTime: null, modal: null, modalVisto: false, votarIds: [], troca: null };
 
 /* ===================== REGRAS ===================== */
 const CHUTEIRAS = [
@@ -579,13 +593,15 @@ async function carregar(){
 async function carregarLista(){
   const p = app.pelada.id;
   app.jogo = ok(await sb.rpc("proximo_jogo", { p }))[0] || null;
-  app.lista = []; app.confirmacoes = [];
+  app.lista = []; app.confirmacoes = []; app.timesJogo = []; app.confrontos = [];
   if (!app.jogo) return;
-  const [lista, conf] = (await Promise.all([
+  const [lista, conf, timesJogo, confrontos] = (await Promise.all([
     sb.rpc("lista_do_jogo", { p, d: app.jogo.data }),
-    sb.from("confirmacoes").select("jogador_id, vou, criado_em").eq("pelada_id", p).eq("data", app.jogo.data)
+    sb.from("confirmacoes").select("jogador_id, vou, criado_em").eq("pelada_id", p).eq("data", app.jogo.data),
+    sb.from("times_do_jogo").select("jogador_id, time").eq("pelada_id", p).eq("data", app.jogo.data),
+    sb.from("confrontos").select("*").eq("pelada_id", p).eq("data", app.jogo.data).order("criado_em")
   ])).map(ok);
-  Object.assign(app, { lista, confirmacoes: conf });
+  Object.assign(app, { lista, confirmacoes: conf, timesJogo, confrontos });
 }
 
 function meusNumeros(){
@@ -641,20 +657,22 @@ function route(manterScroll){
   if (!app.user) renderLogin();
   else if (app.modoDev) {
     const views = { peladas: renderPeladasDev, pelada: app.pelada ? renderPelada : renderPeladasDev, usuarios: renderUsuarios, rankings: renderRankingsDev, ajustes: renderAjustes };
+    if (app.pelada) views.times = renderTimes;
     // dev vê o Cartola da pelada aberta em modo organizador (sem time próprio)
     if (app.pelada) Object.assign(views, { cartola: renderCartola, mercado: renderMercado, liga: renderLiga, pontuacao: renderPontuacao, regras: renderRegras });
     v = views[location.hash.slice(1)] ? location.hash.slice(1) : "peladas";
     itens = NAV_DEV;
     views[v]();
-    if (["pelada", "cartola", "mercado", "liga", "pontuacao", "regras"].includes(v)) v = "peladas";
+    if (["pelada", "times", "cartola", "mercado", "liga", "pontuacao", "regras"].includes(v)) v = "peladas";
   } else if (!app.pelada) renderEscolher();
   else {
-    const views = { inicio: renderInicio, jogadores: renderJogadores, rankings: renderRankings, pelada: renderPelada };
+    const views = { inicio: renderInicio, jogadores: renderJogadores, rankings: renderRankings, pelada: renderPelada, times: renderTimes };
     if (app.pelada.cartola_ativo) Object.assign(views, { cartola: renderCartola, mercado: renderMercado, liga: renderLiga, pontuacao: renderPontuacao, regras: renderRegras });
     v = views[location.hash.slice(1)] ? location.hash.slice(1) : "inicio";
     itens = navJogador();
     views[v]();
     if (["mercado", "liga", "pontuacao", "regras"].includes(v)) v = "cartola";
+    if (v === "times") v = "pelada";
   }
   const nav = document.getElementById("nav");
   nav.classList.toggle("cinco", itens.length > 4);
@@ -756,7 +774,10 @@ function cardPatrocinio(){
 // Mesmo lugar do Slide 01 em toda aba: logo abaixo do primeiro card
 function inserirPatrocinio(){
   if (!app.user || view.querySelector(".sponsor") || !view.firstElementChild) return;
-  view.firstElementChild.insertAdjacentHTML("afterend", cardPatrocinio());
+  // depois do primeiro card, sem separar as sub-abas do conteúdo delas
+  let alvo = view.firstElementChild;
+  while (alvo.nextElementSibling && (alvo.classList.contains("subnav") || alvo.nextElementSibling.classList.contains("subnav"))) alvo = alvo.nextElementSibling;
+  alvo.insertAdjacentHTML("afterend", cardPatrocinio());
 }
 
 /* ===================== INÍCIO DO JOGADOR (Slide 01) ===================== */
@@ -1020,7 +1041,10 @@ async function carregarCartola(){
 
 const cart = () => app.cartola || { regras: [], rodadas: [], times: [], escalacoes: [], scouts: [], resultados: [], pontosTime: [], meuTime: null };
 const rodadaAberta = () => [...cart().rodadas].reverse().find(r => r.status === "aberta") || null;
-const mercadoAberto = () => { const r = rodadaAberta(); return !!r && new Date(r.fecha_em) > new Date(); };
+// mercado abre à 0h do dia da pelada e fecha quando o jogo começa (regra no banco, migração 013)
+const mercadoAbreEm = () => app.jogo ? new Date(`${app.jogo.data}T00:00:00-03:00`) : null;
+const mercadoFechaEm = () => app.jogo ? new Date(app.jogo.inicio) : null;
+const mercadoAberto = () => { const r = rodadaAberta(), a = mercadoAbreEm(), agora = new Date(); return !!r && !!a && agora >= a && agora < mercadoFechaEm(); };
 const encerradas = () => cart().rodadas.filter(r => r.status === "encerrada");
 const ultimaEncerrada = () => encerradas().slice(-1)[0] || null;
 const escalacaoDe = (rodadaId, dono = app.user.id) => cart().escalacoes.filter(e => e.rodada_id === rodadaId && e.jogador_id === dono);
@@ -1047,12 +1071,13 @@ function faltaTempo(fecha){
   const min = Math.floor(ms / 6e4), h = Math.floor(min / 60), d = Math.floor(h / 24);
   return d ? `${d}d ${h % 24}h` : h ? `${h}h ${min % 60}min` : `${Math.max(1, min)}min`;
 }
-const quandoFecha = () => `${DIAS[app.pelada.cartola_dia]} às ${app.pelada.cartola_hora}h`;
 function textoMercado(){
   const r = rodadaAberta();
   if (!r) return "O presidente ainda não abriu a rodada";
-  const f = faltaTempo(r.fecha_em);
-  return f ? `Mercado fecha ${quandoFecha()} · faltam ${f}` : "Mercado fechado · aguardando os scouts do organizador";
+  if (!app.jogo) return "Defina o dia da pelada para abrir o mercado";
+  if (mercadoAberto()) return `Mercado fecha quando a pelada começa · faltam ${faltaTempo(mercadoFechaEm())}`;
+  if (new Date() < mercadoAbreEm()) return `Mercado abre ${momento(mercadoAbreEm())} · faltam ${faltaTempo(mercadoAbreEm())}`;
+  return "Mercado fechado · os pontos saem quando o presidente lançar as estatísticas";
 }
 function statusRodada(){
   const r = rodadaAberta();
@@ -1324,6 +1349,7 @@ function renderListaMerc(){
   const busca = state.mercBusca.trim().toLowerCase();
   const ordem = { media: (a, b) => b.media - a.media, ultima: (a, b) => b.ultima - a.ultima, caro: (a, b) => b.preco - a.preco, barato: (a, b) => a.preco - b.preco }[state.mercOrdem];
   const todos = app.membros.filter(m => m.posicao)
+    .filter(m => situacaoDe(m.jogador_id) === "confirmado" || escalados.some(e => e.atleta_id === m.jogador_id))
     .filter(m => state.mercPos === "todos" || m.posicao === state.mercPos)
     .filter(m => !busca || `${m.jogadores.nome} ${m.jogadores.apelido || ""}`.toLowerCase().includes(busca))
     .map(m => ({ m, preco: Number(m.preco), meu: escalados.some(e => e.atleta_id === m.jogador_id), ...infoAtleta(m.jogador_id) }))
@@ -1331,13 +1357,14 @@ function renderListaMerc(){
   const lista = state.mercTodos ? todos : todos.slice(0, 7);
   const cheio = p => escalados.filter(e => e.posicao === p).length >= vagasDe(esquemaAtual())[p];
   el.innerHTML = `
+    <p class="hint">Só aparecem os ${naLista().length} confirmados na pelada ${app.jogo ? `de ${dataCurta(app.jogo.data)}` : ""}.</p>
     ${lista.length ? `<ul class="list" style="margin-top:6px">
       ${lista.map(x => {
         const pode = aberto && (x.meu || (saldo >= x.preco && !cheio(x.m.posicao)));
         return `
         <li>
           ${avatarDe(x.m.jogador_id)}
-          <div class="who"><b>${esc(nomeDe(x.m.jogador_id))}<span class="pos-tag">${x.m.posicao}</span></b><span>Méd. ${pts(x.media)} · Últ. ${pts(x.ultima)}</span></div>
+          <div class="who"><b>${esc(nomeDe(x.m.jogador_id))}<span class="pos-tag">${x.m.posicao}</span></b><span>${situacaoDe(x.m.jogador_id) === "confirmado" ? `Méd. ${pts(x.media)} · Últ. ${pts(x.ultima)}` : "Não confirmou · venda ele"}</span></div>
           <div class="preco"><b>C$ ${cs(x.preco)}</b>${x.variacao ? `<small class="${x.variacao > 0 ? "sobe" : "desce"}">${x.variacao > 0 ? "↑" : "↓"} ${cs(Math.abs(x.variacao))}</small>` : ""}</div>
           ${temTime ? `<button class="btn sm ${x.meu ? "ghost" : ""}" data-act="${x.meu ? "cartVender" : "cartComprar"}" data-id="${x.m.jogador_id}" ${pode ? "" : "disabled"}>${x.meu ? "Vender" : "Comprar"}</button>` : ""}
         </li>`;
@@ -1470,15 +1497,15 @@ function renderRegras(){
   const passos = [
     ["Escale 7 jogadores", "1 goleiro e 6 na linha, numa das 3 formações: 2-2-2 (equilibrado), 3-2-1 (defensivo) ou 2-1-3 (ofensivo). Tudo dentro do seu saldo de cartoletas."],
     ["Escolha o capitão", "A pontuação dele vale 1,5×. Dá pra trocar até o mercado fechar."],
-    ["Mercado fecha antes da pelada", `${cap(DIAS[app.pelada.cartola_dia])} às ${app.pelada.cartola_hora}h ninguém compra nem vende mais.`],
-    ["Organizador lança os scouts", "Depois do jogo, o adm registra gols, assistências, defesas e cartões."],
+    ["Mercado só no dia da pelada", "Abre à 0h do dia do jogo e fecha quando a pelada começa. Só dá pra escalar quem confirmou presença."],
+    ["Pontos depois do jogo", "Os pontos só contam quando o presidente sobe as estatísticas: gols, assistências, defesas e cartões."],
     ["Preços se atualizam", "Quem joga bem valoriza, quem joga mal desvaloriza. Seu patrimônio acompanha."]
   ];
   view.innerHTML = `
     ${heroCartola({
       status: "Cartola da pelada", titulo: "Regras e scouts", sub: "Como funciona a pontuação e as cartoletas", rotulo: "Todo mundo começa com",
       numero: "100", pill: "C$ cartoletas", meta: "Moeda do jogo",
-      stats: [["7", "Jogadores"], ["×1,5", "Capitão"], [`${DIAS_CURTOS[app.pelada.cartola_dia]} ${app.pelada.cartola_hora}h`, "Mercado fecha"]]
+      stats: [["7", "Jogadores"], ["×1,5", "Capitão"], [app.jogo ? `${DIAS_CURTOS[new Date(app.jogo.inicio).getDay()]} 0h` : "–", "Mercado abre"]]
     })}
     ${subnavCartola("regras")}
     <section class="card fade" style="animation-delay:.05s">
@@ -1620,17 +1647,14 @@ function cardCartolaAdmin(){
       <div class="two">
         <div class="field" style="grid-column:1/-1"><span>Nome da liga</span>
           <form data-form="ligaNome" class="row"><input class="input" name="nome" maxlength="40" value="${esc(P.cartola_liga_nome || "")}" placeholder="Liga ${esc(P.nome)}" aria-label="Nome da liga"><button class="btn sm">Salvar</button></form></div>
-        <label class="field"><span>Mercado fecha</span>
-          <select class="input" data-change="cartDia">${DIAS.map((d, i) => `<option value="${i}" ${P.cartola_dia === i ? "selected" : ""}>${cap(d)}</option>`).join("")}</select></label>
-        <label class="field"><span>Horário</span>
-          <select class="input" data-change="cartHora">${Array.from({ length: 24 }, (_, h) => `<option value="${h}" ${P.cartola_hora === h ? "selected" : ""}>${h}h</option>`).join("")}</select></label>
       </div>
+      <p class="hint" style="margin-top:10px">O mercado abre sozinho à 0h do dia da pelada e fecha quando o jogo começa. Só entram no mercado os jogadores confirmados na lista.</p>
       ${!r ? `
         <p class="note" style="margin-top:14px">${encerradas().length ? "Nenhuma rodada aberta." : "O Cartola ainda não começou."} Antes, defina a posição dos jogadores no Elenco (Editar).</p>
         <button class="btn block" data-act="cartAbrir">Abrir rodada ${cart().rodadas.length + 1}</button>`
       : `
         <p class="note" style="margin-top:14px"><b>Rodada ${r.numero}</b> · ${mercadoAberto()
-          ? `mercado aberto até ${fecha.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" })} às ${fecha.getHours()}h`
+          ? `mercado aberto até ${momento(mercadoFechaEm())}`
           : "mercado fechado: lance a partida e encerre a rodada"} · ${plural(times, "time escalado", "times escalados")}</p>
         ${cartPartidaHtml(r)}
         <details class="box" style="margin-top:14px" ${state.ajustesAbertos ? "open" : ""}>
@@ -1778,7 +1802,8 @@ function renderModal(){
       ${prazo}
       <p class="note" style="margin-top:12px">${avulso ? "Você é avulso: entra na lista de espera e sobe se sobrar vaga de mensalista." : "Você é mensalista: confirmou, está na lista."}
       Depois de confirmar, você avalia quem já está na lista.</p>
-      <div class="dois"><button class="btn ghost" data-act="confirmar" data-vou="0">Não vou</button><button class="btn" data-act="confirmar" data-vou="1">Vou</button></div>`;
+      ${seletorPosicao()}
+      <div class="dois"><button class="btn ghost" data-act="confirmar" data-vou="0">Não vou</button><button class="btn" data-act="confirmar" data-vou="1" ${app.membro.posicao ? "" : "disabled"}>Vou</button></div>`;
   } else if (t === "espera") {
     const pos = naEspera().indexOf(app.user.id) + 1;
     corpo = `${fechar}
@@ -1806,6 +1831,162 @@ function renderModal(){
   el.innerHTML = `<div class="sheet" data-act="nada" role="dialog" aria-modal="true">${corpo}</div>`;
 }
 
+/* ===================== TIMES DA NOITE =====================
+   Sorteio equilibrado pela nota de cada um e pela posição. */
+const QTD_TIMES = 4;
+const COLETES = [["Preto", "#0E0E0E"], ["Branco", "#FFFFFF"], ["Verde", "#B5F23D"], ["Azul", "#1D4ED8"], ["Vermelho", "#DC2626"], ["Amarelo", "#FACC15"], ["Roxo", "#7C3AED"], ["Laranja", "#F59E0B"]];
+const nomeTime = n => COLETES[(n - 1) % COLETES.length][0];
+const colete = n => `<span class="colete" style="background:${COLETES[(n - 1) % COLETES.length][1]}"></span>`;
+const subnavPelada = ativo => `<nav class="subnav span2 fade">${[["pelada", "Pelada"], ["times", "Times da noite"]]
+  .map(([k, v]) => `<a href="#${k}" class="${k === ativo ? "on" : ""}">${v}</a>`).join("")}</nav>`;
+
+function seletorPosicao(card){
+  const atual = app.membro && app.membro.posicao;
+  if (!app.membro) return "";
+  return `<div class="${card ? "" : "box"}" style="margin-top:12px">
+    <p class="note" style="margin:0 0 10px">${atual ? `Você joga de <b>${NOME_POS[atual][0]}</b>. Vale pro sorteio dos times e pro Cartola.` : "<b>Escolha sua posição principal</b> pra entrar no sorteio dos times e no Cartola."}</p>
+    <div class="seg full">${POSICOES.map(k => `<button class="${atual === k ? "on" : ""}" data-act="minhaPosicao" data-valor="${k}">${cap(NOME_POS[k][0])}</button>`).join("")}</div>
+  </div>`;
+}
+
+// nota de cada um pro sorteio: média dos votos das últimas 12 semanas, puxada pro pote quando há poucos votos
+function notaSorteio(id){
+  const m = membroDe(id), N = app.pelada.qtd_potes;
+  const base = m && m.pote_manual ? 6 - (Math.min(m.pote_manual, N) - 1) * 5 / Math.max(1, N - 1) : 3.5;
+  const desde = diasAtras(84);
+  const r = app.medias.filter(x => x.jogador_id === id && x.data >= desde);
+  const votos = r.reduce((s, x) => s + Number(x.total_votos), 0);
+  const soma = r.reduce((s, x) => s + Number(x.media) * Number(x.total_votos), 0);
+  const PESO_BASE = 6;   // quem tem poucos votos fica perto do pote; com muitos votos vale a média
+  return (soma + PESO_BASE * base) / (votos + PESO_BASE);
+}
+
+// distribui por posição (cada time com a mesma quantidade de goleiros, zagueiros, meias e atacantes)
+// e depois troca jogadores da mesma posição entre times até as forças ficarem o mais parelhas possível
+function sortearTimes(ids, n){
+  const nota = new Map(ids.map(id => [id, notaSorteio(id)]));
+  const pos = id => (membroDe(id) || {}).posicao || "LIN";
+  const cap_ = Math.ceil(ids.length / n);
+  const forca = t => t.reduce((s, id) => s + nota.get(id), 0);
+  const custo = ts => { const f = ts.map(forca), med = f.reduce((a, b) => a + b, 0) / n; return f.reduce((s, x) => s + (x - med) ** 2, 0); };
+  const tentativas = [];
+  for (let k = 0; k < 120; k++) {
+    const ts = Array.from({ length: n }, () => []);
+    for (const p of ["GOL", "ZAG", "MEI", "ATA", "LIN"]) {
+      const grupo = ids.filter(id => pos(id) === p).sort((a, b) => (nota.get(b) + Math.random() * 0.6) - (nota.get(a) + Math.random() * 0.6));
+      for (const id of grupo) {
+        const livres = ts.filter(t => t.length < cap_);
+        livres.sort((a, b) => a.filter(x => pos(x) === p).length - b.filter(x => pos(x) === p).length || a.length - b.length || forca(a) - forca(b));
+        livres[0].push(id);
+      }
+    }
+    let melhorou = true;
+    while (melhorou) {
+      melhorou = false;
+      const atual = custo(ts);
+      for (let a = 0; a < n && !melhorou; a++) for (let b = a + 1; b < n && !melhorou; b++)
+        for (let i = 0; i < ts[a].length && !melhorou; i++) for (let j = 0; j < ts[b].length && !melhorou; j++) {
+          if (pos(ts[a][i]) !== pos(ts[b][j])) continue;
+          [ts[a][i], ts[b][j]] = [ts[b][j], ts[a][i]];
+          if (custo(ts) < atual - 1e-9) melhorou = true; else [ts[a][i], ts[b][j]] = [ts[b][j], ts[a][i]];
+        }
+    }
+    tentativas.push({ ts, c: custo(ts) });
+  }
+  tentativas.sort((a, b) => a.c - b.c);
+  const boas = tentativas.filter(t => t.c <= tentativas[0].c + 0.05);   // entre os mais equilibrados, um ao acaso
+  return boas[Math.floor(Math.random() * boas.length)].ts;
+}
+
+function timesDoJogo(){
+  const m = new Map();
+  app.timesJogo.forEach(t => { if (!m.has(t.time)) m.set(t.time, []); m.get(t.time).push(t.jogador_id); });
+  return [...m.entries()].sort((a, b) => a[0] - b[0]);
+}
+
+function renderTimes(){
+  view.className = "grid solo wide";
+  const j = app.jogo, pres = souPresidente();
+  if (!j) {
+    view.innerHTML = `${subnavPelada("times")}<section class="card fade"><div class="empty">O presidente ainda não definiu o dia da pelada.</div></section>`;
+    return;
+  }
+  const confirmados = naLista(), vagas = app.pelada.vagas || mensalistas();
+  const times = timesDoJogo(), sorteado = times.length > 0;
+  const libera = confirmados.length >= vagas || listaStatus() === "fechada";
+  const emCampo = app.confrontos.find(c => c.status === "em_campo");
+  const jogados = app.confrontos.filter(c => c.status === "encerrado");
+  const meuTime = (app.timesJogo.find(t => t.jogador_id === app.user.id) || {}).time;
+  const ordemPos = { GOL: 0, ZAG: 1, MEI: 2, ATA: 3 };
+  const fmtForca = ids => fmt(ids.reduce((s, id) => s + notaSorteio(id), 0) / ids.length);
+  const resumoPos = ids => POSICOES.map(p => [p, ids.filter(id => (membroDe(id) || {}).posicao === p).length]).filter(([, q]) => q).map(([p, q]) => `${q} ${p}`).join(" · ");
+  // sugestão do próximo jogo: os dois times que menos jogaram (e não estão em campo)
+  const jogos = n => app.confrontos.filter(c => c.time_a === n || c.time_b === n).length;
+  const sugestao = times.map(([n]) => n).sort((a, b) => jogos(a) - jogos(b) || a - b);
+  const opcoes = sel => times.map(([n]) => `<option value="${n}" ${n === sel ? "selected" : ""}>${nomeTime(n)}</option>`).join("");
+
+  view.innerHTML = `
+    ${subnavPelada("times")}
+    <section class="card fade">
+      <div class="card-head" style="margin-bottom:0">
+        <div><div class="eyebrow">Times da noite · ${cap(DIAS[new Date(j.inicio).getDay()])} ${dataCurta(j.data)}</div>
+          <div class="h2">${sorteado ? `${times.length} times sorteados` : "Sorteio dos times"}</div></div>
+        <span class="pill ${confirmados.length >= vagas ? "lime" : "soft"}">${confirmados.length}/${vagas} confirmados</span>
+      </div>
+      <p class="note">${sorteado ? "Times equilibrados pela média das notas e pela posição de cada um."
+        : libera ? "Lista completa. Já dá pra sortear."
+        : `O sorteio libera quando os ${vagas} confirmarem (faltam ${vagas - confirmados.length}) ou quando a lista fechar.`}</p>
+      ${pres ? `<div class="row" style="margin-top:14px">
+        <button class="btn" data-act="sortear" ${libera && confirmados.length >= QTD_TIMES ? "" : "disabled"}>${sorteado ? "Sortear de novo" : "Sortear times"}</button>
+        ${sorteado ? `<span class="hint" style="margin:0">Toque em dois jogadores de times diferentes pra trocar.</span>` : ""}
+      </div>` : ""}
+    </section>
+
+    ${sorteado ? `
+    <section class="card fade" style="animation-delay:.04s">
+      <div class="eyebrow">${emCampo ? "Em campo agora" : "Nenhum jogo em campo"}</div>
+      ${emCampo ? `
+        <div class="placar">
+          <div class="lado">${colete(emCampo.time_a)}${nomeTime(emCampo.time_a)}
+            ${pres ? `<div class="stepper"><button data-act="golConfronto" data-id="${emCampo.id}" data-lado="a" data-d="-1" aria-label="Tirar gol">−</button><button data-act="golConfronto" data-id="${emCampo.id}" data-lado="a" data-d="1" aria-label="Gol">+</button></div>` : ""}</div>
+          <div><span class="gols">${emCampo.gols_a}</span> <span class="x">x</span> <span class="gols">${emCampo.gols_b}</span></div>
+          <div class="lado">${colete(emCampo.time_b)}${nomeTime(emCampo.time_b)}
+            ${pres ? `<div class="stepper"><button data-act="golConfronto" data-id="${emCampo.id}" data-lado="b" data-d="-1" aria-label="Tirar gol">−</button><button data-act="golConfronto" data-id="${emCampo.id}" data-lado="b" data-d="1" aria-label="Gol">+</button></div>` : ""}</div>
+        </div>
+        ${pres ? `<button class="btn ghost block" data-act="encerrarConfronto" data-id="${emCampo.id}">Encerrar este jogo</button>` : ""}`
+      : `<div class="h2">${pres ? "Escolha quem joga" : "Aguardando o presidente"}</div>`}
+      ${pres ? `
+        <form data-form="confronto" style="margin-top:14px">
+          <div class="two">
+            <label class="field" style="margin:0"><span>Time</span><select class="input" name="a">${opcoes(sugestao[0])}</select></label>
+            <label class="field" style="margin:0"><span>Contra</span><select class="input" name="b">${opcoes(sugestao[1])}</select></label>
+          </div>
+          <button class="btn block">${emCampo ? "Próximo jogo em campo" : "Colocar em campo"}</button>
+        </form>` : ""}
+      ${jogados.length ? `<div class="lista-sub">Jogos da noite <span>${plural(jogados.length, "encerrado", "encerrados")}</span></div>
+        <ul class="list">${jogados.map((c, i) => `<li><span class="num">${i + 1}</span>
+          <div class="who"><b>${nomeTime(c.time_a)} ${c.gols_a} x ${c.gols_b} ${nomeTime(c.time_b)}</b></div></li>`).join("")}</ul>` : ""}
+    </section>
+
+    <div class="times-grid span2">
+      ${times.map(([n, ids]) => `
+        <section class="card fade time-card ${n === meuTime ? "meu" : ""}">
+          <div class="time-head">
+            <div class="h2">${colete(n)}${nomeTime(n)}${n === meuTime ? ` <span class="pill lime">Seu time</span>` : ""}</div>
+            <span class="pill soft">Força ${fmtForca(ids)}</span>
+          </div>
+          <p class="hint">${resumoPos(ids)}</p>
+          <ul class="list">${[...ids].sort((a, b) => (ordemPos[(membroDe(a) || {}).posicao] ?? 9) - (ordemPos[(membroDe(b) || {}).posicao] ?? 9) || notaSorteio(b) - notaSorteio(a)).map(id => `
+            <li class="${state.troca === id ? "sel" : ""} ${pres ? "click" : ""}" ${pres ? `data-act="trocarJogador" data-id="${id}"` : ""}>
+              ${avatarDe(id)}
+              <div class="who"><b>${esc(nomeDe(id))}${id === app.user.id ? " · você" : ""}</b><span>${cap((membroDe(id) || {}).tipo || "")}</span></div>
+              <span class="pos-tag">${(membroDe(id) || {}).posicao || "–"}</span>
+              ${pres ? `<span class="pos-pts" style="text-align:right">${fmt(notaSorteio(id))}</span>` : ""}
+            </li>`).join("")}</ul>
+        </section>`).join("")}
+    </div>` : ""}`;
+}
+
 /* ===================== PELADA ===================== */
 function renderPelada(){
   if (souPresidente()) return renderPeladaAdmin();
@@ -1813,7 +1994,12 @@ function renderPelada(){
   const tabela = potes();
   view.innerHTML = `
     ${heroPelada()}
+    ${subnavPelada("pelada")}
     ${cardLista()}
+    <section class="card fade" style="animation-delay:.04s">
+      <div class="eyebrow">Cartola e sorteio</div><div class="h2">Sua posição</div>
+      ${seletorPosicao(true)}
+    </section>
     <section class="card fade" style="animation-delay:.05s">
       <div class="card-head"><div><div class="eyebrow">Elenco</div><div class="h2">Jogadores</div></div></div>
       <ul class="list">
@@ -1870,6 +2056,7 @@ function renderPeladaAdmin(){
   view.className = "grid solo wide";
   view.innerHTML = `
     ${heroPelada()}
+    ${subnavPelada("pelada")}
     ${cardLista()}
     ${cardPartidas()}
     ${cardCartolaAdmin()}
@@ -2324,6 +2511,46 @@ const ACOES = {
   }),
   fecharModal: () => { state.modal = null; renderModal(); route(true); },
   nada: () => {},
+  minhaPosicao: el => run(async () => {
+    ok(await sb.rpc("definir_minha_posicao", { p: app.pelada.id, pos: el.dataset.valor }));
+    app.membro.posicao = el.dataset.valor;
+    aviso(`Posição salva: ${NOME_POS[el.dataset.valor][0]}`);
+    renderModal();
+    route(true);
+  }),
+  sortear: () => run(async () => {
+    const times = sortearTimes(naLista(), QTD_TIMES);
+    const linhas = times.flatMap((ids, i) => ids.map(jogador_id => ({ jogador_id, time: i + 1 })));
+    ok(await sb.rpc("salvar_sorteio", { p: app.pelada.id, d: app.jogo.data, times: linhas }));
+    state.troca = null;
+    await carregarLista();
+    aviso("Times sorteados e equilibrados!");
+    route(true);
+  }),
+  trocarJogador: el => run(async () => {
+    const id = el.dataset.id;
+    if (!state.troca || state.troca === id) { state.troca = state.troca === id ? null : id; return route(true); }
+    const a = app.timesJogo.find(t => t.jogador_id === state.troca), b = app.timesJogo.find(t => t.jogador_id === id);
+    state.troca = null;
+    if (a.time === b.time) { state.troca = id; return route(true); }
+    const linha = (jid, time) => sb.from("times_do_jogo").update({ time }).eq("pelada_id", app.pelada.id).eq("data", app.jogo.data).eq("jogador_id", jid);
+    ok(await linha(a.jogador_id, b.time)); ok(await linha(b.jogador_id, a.time));
+    await carregarLista();
+    aviso(`${nomeDe(a.jogador_id)} ⇄ ${nomeDe(b.jogador_id)}`);
+    route(true);
+  }),
+  golConfronto: el => run(async () => {
+    const c = app.confrontos.find(x => x.id === el.dataset.id), campo = el.dataset.lado === "a" ? "gols_a" : "gols_b";
+    const valor = Math.max(0, c[campo] + Number(el.dataset.d));
+    ok(await sb.from("confrontos").update({ [campo]: valor }).eq("id", c.id));
+    c[campo] = valor;
+    route(true);
+  }),
+  encerrarConfronto: el => run(async () => {
+    ok(await sb.from("confrontos").update({ status: "encerrado" }).eq("id", el.dataset.id));
+    await carregarLista();
+    route(true);
+  }),
   apagarGol: el => run(async () => { ok(await sb.from("gols").delete().eq("id", el.dataset.id)); await recarregar(); }),
   apagarLance: el => run(async () => {
     const q = Number(el.dataset.qtd);
@@ -2406,7 +2633,7 @@ const ACOES = {
   cartAbrir: () => run(async () => {
     const r = ok(await sb.rpc("cartola_abrir_rodada", { p: app.pelada.id }));
     await carregarCartola(); route(true);
-    aviso(`Rodada ${r.numero} aberta. O mercado fecha ${quandoFecha()}.`);
+    aviso(`Rodada ${r.numero} aberta. O mercado abre à 0h do dia da pelada.`);
   }),
   cartScoutMenos: el => run(async () => {
     const r = rodadaAberta(), q = Number(el.dataset.qtd);
@@ -2590,6 +2817,14 @@ const FORMS = {
     if (r === "vinculado") { state.editando = null; aviso("Essa pessoa já tinha conta: perfil ligado!"); }
     else aviso("E-mail salvo. Liga assim que a pessoa criar a conta.");
     await recarregar();
+  }),
+  confronto: (f, d) => run(async () => {
+    const a = Number(d.get("a")), b = Number(d.get("b"));
+    if (a === b) return aviso("Escolha dois times diferentes.");
+    ok(await sb.rpc("colocar_em_campo", { p: app.pelada.id, d: app.jogo.data, a, b }));
+    await carregarLista();
+    aviso(`Em campo: ${nomeTime(a)} x ${nomeTime(b)}`);
+    route(true);
   }),
   novaPartida: (f, d) => run(async () => {
     const nova = app.partidas.find(p => p.data === d.get("data"))
