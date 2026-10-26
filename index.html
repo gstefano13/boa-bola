@@ -1800,7 +1800,7 @@ function linhaLista(id, i, espera){
     <span class="num${espera ? "" : " lime"}">${i + 1}</span>
     ${avatarDe(id)}
     <div class="who"><b>${esc(nomeDe(id))}${id === app.user.id ? " · você" : ""}</b><span>${m ? cap(m.tipo) : ""}</span></div>
-    ${!espera && id !== app.user.id && situacaoDe(app.user.id) === "confirmado" ? `<span class="pill ${notaMinha(id) ? "soft" : "off"}">${notaMinha(id) ? `Nota ${notaMinha(id)}` : "Falta votar"}</span>` : ""}
+    ${!espera && id !== app.user.id && situacaoDe(app.user.id) === "confirmado" ? `<span class="pill ${notaMinha(id) ? "soft" : "off"}">${notaMinha(id) ? `Pote ${7 - notaMinha(id)}` : "Falta votar"}</span>` : ""}
   </li>`;
 }
 function cardLista(){
@@ -1872,7 +1872,7 @@ function passosGuia(){
         "A lista <b>fecha 2 horas antes</b> do jogo. O prazo aparece sempre no card." ]) },
     { ico: ICO_VOTO, titulo: "Votação",
       corpo: itens([
-        "Depois de confirmar, você dá nota <b>de 1 a 6</b> pra quem também vai.",
+        "Depois de confirmar, você avalia quem também vai <b>de 1 a 6, igual ao pote</b>: 1 = joga muito, 6 = joga pouco.",
         "O voto é <b>secreto</b> e dá pra mudar até a lista fechar.",
         "Quem confirmar depois de você aparece pra votar na próxima vez que abrir o app." ]) },
     { ico: ICO_TIMES, titulo: "Times da noite",
@@ -1979,13 +1979,13 @@ function renderModal(){
     corpo = `${fechar}
       <div class="eyebrow">Votação · ${faltam ? `falta${faltam > 1 ? "m" : ""} ${faltam}` : "tudo votado ✓"}</div>
       <div class="h2">Avalie quem está na lista</div>
-      <p class="note">De 1 a 6: <b>6 = joga muito</b>. Seu voto é secreto e dá pra mudar até a lista fechar.</p>
+      <p class="note">De 1 a 6, igual ao pote: <b>1 = joga muito</b>, 6 = joga pouco. Seu voto é secreto e dá pra mudar até a lista fechar.</p>
       ${prazo}
       ${ids.length ? `<ul class="list">${ids.map(vid => `
         <li>
           ${avatarDe(vid)}
           <div class="who"><b>${esc(nomeDe(vid))}</b><span>${notaMinha(vid) ? "Votado" : "Falta votar"}</span></div>
-          <div class="notas">${[1,2,3,4,5,6].map(n => `<button class="${notaMinha(vid) === n ? "on" : ""}" data-act="votarLista" data-jogador="${vid}" data-nota="${n}" aria-label="Nota ${n} para ${esc(nomeDe(vid))}">${n}</button>`).join("")}</div>
+          <div class="notas">${[1,2,3,4,5,6].map(n => `<button class="${notaMinha(vid) === 7 - n ? "on" : ""}" data-act="votarLista" data-jogador="${vid}" data-nota="${7 - n}" aria-label="Pote ${n} para ${esc(nomeDe(vid))}">${n}</button>`).join("")}</div>
         </li>`).join("")}</ul>` : `<div class="empty">Ninguém pra avaliar ainda.<br>Quando mais gente confirmar, a votação abre de novo.</div>`}
       <button class="btn block" data-act="fecharModal">${faltam ? "Votar depois" : "Pronto"}</button>`;
   }
