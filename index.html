@@ -1111,9 +1111,9 @@ async function carregarCartola(){
 
 const cart = () => app.cartola || { regras: [], rodadas: [], times: [], escalacoes: [], scouts: [], resultados: [], pontosTime: [], meuTime: null };
 const rodadaAberta = () => [...cart().rodadas].reverse().find(r => r.status === "aberta") || null;
-// mercado abre à 0h do dia da pelada e fecha quando o jogo começa (regra no banco, migração 013)
+// mercado abre à 0h do dia da pelada e fecha 1h antes do jogo (regra no banco, migração 017)
 const mercadoAbreEm = () => app.jogo ? new Date(`${app.jogo.data}T00:00:00-03:00`) : null;
-const mercadoFechaEm = () => app.jogo ? new Date(app.jogo.inicio) : null;
+const mercadoFechaEm = () => app.jogo ? new Date(new Date(app.jogo.inicio) - 36e5) : null;
 const mercadoAberto = () => { const r = rodadaAberta(), a = mercadoAbreEm(), agora = new Date(); return !!r && !!a && agora >= a && agora < mercadoFechaEm(); };
 const encerradas = () => cart().rodadas.filter(r => r.status === "encerrada");
 const ultimaEncerrada = () => encerradas().slice(-1)[0] || null;
@@ -1145,7 +1145,7 @@ function textoMercado(){
   const r = rodadaAberta();
   if (!r) return "O presidente ainda não abriu a rodada";
   if (!app.jogo) return "Defina o dia da pelada para abrir o mercado";
-  if (mercadoAberto()) return `Mercado fecha quando a pelada começa · faltam ${faltaTempo(mercadoFechaEm())}`;
+  if (mercadoAberto()) return `Mercado fecha 1h antes da pelada · faltam ${faltaTempo(mercadoFechaEm())}`;
   if (new Date() < mercadoAbreEm()) return `Mercado abre ${momento(mercadoAbreEm())} · faltam ${faltaTempo(mercadoAbreEm())}`;
   return "Mercado fechado · os pontos saem quando o presidente lançar as estatísticas";
 }
@@ -1567,7 +1567,7 @@ function renderRegras(){
   const passos = [
     ["Escale 6 jogadores", "Só jogadores de linha (goleiro não entra, porque na pelada ele não é fixo), numa das 3 formações: 2-2-2 (equilibrado), 3-2-1 (defensivo) ou 2-1-3 (ofensivo). Tudo dentro do seu saldo de cartoletas."],
     ["Escolha o capitão", "A pontuação dele vale 1,5×. Dá pra trocar até o mercado fechar."],
-    ["Mercado só no dia da pelada", "Abre à 0h do dia do jogo e fecha quando a pelada começa. Só dá pra escalar quem confirmou presença."],
+    ["Mercado só no dia da pelada", "Abre à 0h do dia do jogo e fecha 1 hora antes da pelada. Só dá pra escalar quem confirmou presença."],
     ["Pontos depois do jogo", "Os pontos só contam quando o presidente sobe as estatísticas: gols, assistências, defesas e cartões."],
     ["Preços se atualizam", "Quem joga bem valoriza, quem joga mal desvaloriza. Seu patrimônio acompanha."]
   ];
@@ -1723,7 +1723,7 @@ function cardCartolaAdmin(){
         <div class="field" style="grid-column:1/-1"><span>Nome da liga</span>
           <form data-form="ligaNome" class="row"><input class="input" name="nome" maxlength="40" value="${esc(P.cartola_liga_nome || "")}" placeholder="Liga ${esc(P.nome)}" aria-label="Nome da liga"><button class="btn sm">Salvar</button></form></div>
       </div>
-      <p class="hint" style="margin-top:10px">O mercado abre sozinho à 0h do dia da pelada e fecha quando o jogo começa. Só entram no mercado os jogadores confirmados na lista.</p>
+      <p class="hint" style="margin-top:10px">O mercado abre sozinho à 0h do dia da pelada e fecha 1 hora antes do jogo. Só entram no mercado os jogadores confirmados na lista.</p>
       ${!r ? `
         <p class="note" style="margin-top:14px">${encerradas().length ? "Nenhuma rodada aberta." : "O Cartola ainda não começou."} Antes, defina a posição dos jogadores no Elenco (Editar).</p>
         <button class="btn block" data-act="cartAbrir">Abrir rodada ${cart().rodadas.length + 1}</button>`
@@ -2805,7 +2805,7 @@ const ACOES = {
       await carregarCartola();
     }
     route(true);
-    aviso(meuEscalado().length < 7 ? `Time salvo. ${faltamNoTime(meuEscalado())}.` : "Time salvo!");
+    aviso(meuEscalado().length < TAM_TIME ? `Time salvo. ${faltamNoTime(meuEscalado())}.` : "Time salvo!");
   }),
   cartVaga: el => { state.mercPos = el.dataset.pos; state.mercTodos = false; location.hash = "mercado"; },
   cartRenomear: () => { state.renomear = !state.renomear; route(true); },
