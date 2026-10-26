@@ -375,7 +375,7 @@ const state = { periodo: "mes", stat: "gols", login: "codigo", loginEmail: "", l
   busca: "", filtro: "todas", verTodas: false, novaPelada: false, buscaUsu: "",
   buscaJog: "", filtroJog: "todos", verTodosJog: false, editando: null, addJogador: false, editMetrica: null,
   mercPos: "todos", mercBusca: "", mercOrdem: "media", mercTodos: false, pontRodada: null, faq: 0, renomear: false,
-  capitao: null, capitaoRodada: undefined, confirmEncerrar: false, editScout: null, ajustesAbertos: false, editarTime: false, formTime: null, modal: null, modalVisto: false, guiaPasso: 0, votarIds: [], troca: null };
+  capitao: null, capitaoRodada: undefined, confirmEncerrar: false, editScout: null, ajustesAbertos: false, editarTime: false, formTime: null, modal: null, modalVisto: false, votosVistos: new Set(), guiaPasso: 0, votarIds: [], troca: null };
 
 /* ===================== REGRAS ===================== */
 const CHUTEIRAS = [
@@ -638,6 +638,17 @@ async function carregarLista(){
     sb.from("confrontos").select("*").eq("pelada_id", p).eq("data", app.jogo.data).order("criado_em")
   ])).map(ok);
   Object.assign(app, { lista, confirmacoes: conf, timesJogo, confrontos });
+}
+
+// só o que muda durante a lista aberta: quem confirmou, a partida do dia e os meus votos
+async function atualizarVotacao(){
+  const p = app.pelada.id;
+  const [partidas, meusVotos] = (await Promise.all([
+    tudo(() => sb.from("partidas").select("id, data").eq("pelada_id", p).order("data")),
+    tudo(() => sb.from("votos").select("partida_id, votado_id, nota").eq("pelada_id", p).eq("votante_id", app.user.id).order("id"))
+  ])).map(ok);
+  Object.assign(app, { partidas, meusVotos });
+  await carregarLista();
 }
 
 function meusNumeros(){
@@ -1931,8 +1942,7 @@ function corpoGuia(){
 }
 function abrirGuia(){
   state.guiaPasso = 0;
-  state.modal = "guia";
-  state.modalVisto = true;   // a lista de confirmação abre depois, quando a pessoa fechar o guia
+  state.modal = "guia";   // a lista de confirmação e a votação abrem depois, quando a pessoa fechar o guia
   renderModal();
 }
 const cardGuia = () => `
@@ -1945,13 +1955,38 @@ const cardGuia = () => `
       <button class="btn ghost sm" data-act="abrirGuia" style="margin-top:12px">Ver o guia</button>
     </section>`;
 
+// Confirmar: aparece uma vez por sessão. Votar: aparece sempre que houver alguém da lista sem o seu voto
+// que ainda não apareceu no pop-up desde que o app foi aberto (ou voltou pra tela).
 function popupAutomatico(){
-  if (!app.user || app.modoDev || !app.pelada || !app.membro || state.modalVisto || state.modal) return;
+  if (!app.user || app.modoDev || !app.pelada || !app.membro || state.modal) return;
   if (listaStatus() !== "aberta") return;
-  if (!confDe(app.user.id)) state.modal = "confirmar";
-  else if (faltaVotar().length) { state.votarIds = faltaVotar(); state.modal = "votar"; }
-  if (state.modal) { state.modalVisto = true; renderModal(); }
+  if (!confDe(app.user.id)) {
+    if (state.modalVisto) return;
+    state.modal = "confirmar";
+    state.modalVisto = true;
+  } else {
+    const falta = faltaVotar();
+    if (!falta.some(id => !state.votosVistos.has(id))) return;
+    falta.forEach(id => state.votosVistos.add(id));
+    state.votarIds = falta;
+    state.modal = "votar";
+  }
+  renderModal();
 }
+// lista aberta: confere a cada minuto e quando o app volta pra tela se alguém novo confirmou
+async function vigiarVotacao(voltou){
+  if (!app.user || app.modoDev || !app.pelada || !app.membro || listaStatus() !== "aberta" || document.hidden) return;
+  try { await atualizarVotacao(); } catch (e) { return; }
+  if (voltou) state.votosVistos.clear();
+  const digitando = ["INPUT", "SELECT", "TEXTAREA"].includes((document.activeElement || {}).tagName);
+  if (state.modal === "votar") {   // pop-up aberto: quem confirmou agora entra no fim da lista dele
+    faltaVotar().filter(id => !state.votarIds.includes(id)).forEach(id => { state.votarIds.push(id); state.votosVistos.add(id); });
+    renderModal();
+  } else if (!state.modal && !digitando) route(true);
+  else popupAutomatico();
+}
+setInterval(() => vigiarVotacao(false), 60000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) vigiarVotacao(true); });
 
 function renderModal(){
   const el = document.getElementById("modal");
@@ -2665,6 +2700,7 @@ const ACOES = {
     const s = situacaoDe(app.user.id);
     if (vou && s === "confirmado") {
       state.votarIds = faltaVotar();
+      state.votarIds.forEach(id => state.votosVistos.add(id));
       state.modal = state.votarIds.length ? "votar" : null;
       aviso(state.votarIds.length ? "Confirmado! Agora avalie quem já está na lista." : "Confirmado! Você é o primeiro da lista.");
     } else if (vou) state.modal = "espera";
@@ -2675,14 +2711,18 @@ const ACOES = {
   abrirVotacao: () => {
     const outros = naLista().filter(id => id !== app.user.id);
     state.votarIds = [...outros.filter(id => !notaMinha(id)), ...outros.filter(id => notaMinha(id))];
+    state.votarIds.forEach(id => state.votosVistos.add(id));
     state.modal = "votar";
     renderModal();
   },
   votarLista: el => run(async () => {
     const votado = el.dataset.jogador, nota = Number(el.dataset.nota);
-    ok(await sb.rpc("votar_na_lista", { p: app.pelada.id, votado, nota_: nota }));
+    try { ok(await sb.rpc("votar_na_lista", { p: app.pelada.id, votado, nota_: nota })); }
+    catch (e) { await atualizarVotacao(); renderModal(); throw e; }   // ex.: a pessoa saiu da lista; mostra a lista atual
     const pa = partidaDoJogo();
-    app.meusVotos = app.meusVotos.filter(v => !(v.partida_id === pa.id && v.votado_id === votado)).concat({ partida_id: pa.id, votado_id: votado, nota });
+    // a partida do dia pode ter sido criada depois que o app abriu: aí busca de novo em vez de quebrar
+    if (pa) app.meusVotos = app.meusVotos.filter(v => !(v.partida_id === pa.id && v.votado_id === votado)).concat({ partida_id: pa.id, votado_id: votado, nota });
+    else await atualizarVotacao();
     renderModal();
   }),
   fecharModal: () => { state.modal = null; renderModal(); route(true); },
