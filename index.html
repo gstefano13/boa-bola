@@ -217,6 +217,11 @@ button.pill{font:inherit;font-size:12.5px;font-weight:500;border:0;cursor:pointe
 .notas{display:flex;gap:4px;flex:none}
 .notas button{width:30px;height:30px;border-radius:var(--r-sm);border:1px solid var(--line);background:var(--soft);font-size:13px;font-weight:500}
 .notas button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+/* votação: nome inteiro numa linha, notas embaixo ocupando a largura */
+.list li.voto{flex-wrap:wrap;row-gap:10px}
+.list li.voto .who{flex:1 1 0;min-width:0}
+.list li.voto .notas{flex:1 1 100%;gap:6px}
+.list li.voto .notas button{flex:1;width:auto;height:38px;font-size:15px}
 .toast{position:fixed;left:50%;top:16px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:999px;font-size:13px;z-index:30;box-shadow:var(--shadow);max-width:calc(100% - 32px);text-align:center}
 .toast:empty{display:none}
 
@@ -2051,7 +2056,7 @@ function renderModal(){
       <p class="note">De 1 a 6, igual ao pote: <b>1 = joga muito</b>, 6 = joga pouco. Seu voto é secreto e dá pra mudar até a lista fechar.</p>
       ${prazo}
       ${ids.length ? `<ul class="list">${ids.map(vid => `
-        <li>
+        <li class="voto">
           ${avatarDe(vid)}
           <div class="who"><b>${esc(nomeDe(vid))}</b><span>${notaMinha(vid) ? "Votado" : "Falta votar"}</span></div>
           <div class="notas">${[1,2,3,4,5,6].map(n => `<button class="${notaMinha(vid) === 7 - n ? "on" : ""}" data-act="votarLista" data-jogador="${vid}" data-nota="${7 - n}" aria-label="Pote ${n} para ${esc(nomeDe(vid))}">${n}</button>`).join("")}</div>
