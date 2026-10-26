@@ -1038,7 +1038,7 @@ const POSICOES = ["GOL", "ZAG", "MEI", "ATA"];
 // formações: só linha (ZAG-MEI-ATA). Goleiro não entra no Cartola: na pelada ele não é fixo
 const POSICOES_CARTOLA = ["ZAG", "MEI", "ATA"];
 const TAM_TIME = 6;
-const ESQUEMAS = [["2-2-2", "Equilibrado"], ["3-2-1", "Defensivo"], ["2-1-3", "Ofensivo"]];
+const ESQUEMAS = [["2-2-2", "Equilibrado"], ["3-2-1", "Defensivo"], ["2-1-3", "Ofensivo"], ["2-3-1", "Meio forte"]];
 const vagasDe = esquema => { const [z, m, a] = (esquema || "2-2-2").split("-").map(Number); return { GOL: 0, ZAG: z, MEI: m, ATA: a }; };
 const noMercado = m => m.posicao && m.posicao !== "GOL";
 const esquemaAtual = () => (cart().meuTime || {}).esquema || "2-2-2";
@@ -1565,7 +1565,7 @@ function renderRegras(){
     <li><span class="cod">${r.codigo}</span><div class="who"><b>${esc(r.nome)}</b>${sub(r) ? `<span>${sub(r)}</span>` : ""}</div>
       <span class="${r.pontos < 0 ? "val-neg" : "val-pos"}">${sinal(Number(r.pontos))}</span></li>`).join("")}</ul>`;
   const passos = [
-    ["Escale 6 jogadores", "Só jogadores de linha (goleiro não entra, porque na pelada ele não é fixo), numa das 3 formações: 2-2-2 (equilibrado), 3-2-1 (defensivo) ou 2-1-3 (ofensivo). Tudo dentro do seu saldo de cartoletas."],
+    ["Escale 6 jogadores", "Só jogadores de linha (goleiro não entra, porque na pelada ele não é fixo), numa das 4 formações: 2-2-2 (equilibrado), 3-2-1 (defensivo), 2-1-3 (ofensivo) ou 2-3-1 (meio forte). Tudo dentro do seu saldo de cartoletas."],
     ["Escolha o capitão", "A pontuação dele vale 1,5×. Dá pra trocar até o mercado fechar."],
     ["Mercado só no dia da pelada", "Abre à 0h do dia do jogo e fecha 1 hora antes da pelada. Só dá pra escalar quem confirmou presença."],
     ["Pontos depois do jogo", "Os pontos só contam quando o presidente sobe as estatísticas: gols, assistências, defesas e cartões."],
