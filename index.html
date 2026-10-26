@@ -306,6 +306,16 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .sheet .dois{margin-top:16px}
 .sheet .list{margin-top:8px}
 @media(min-width:700px){.modal{align-items:center}}
+.guia-ico{width:52px;height:52px;border-radius:14px;background:var(--lime);display:grid;place-items:center;margin-bottom:14px}
+.guia-ico svg{width:26px;height:26px}
+.guia-lista{list-style:none;margin-top:12px}
+.guia-lista li{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line);font-size:13.5px;line-height:1.45;color:var(--ink-2)}
+.guia-lista li:last-child{border-bottom:0}
+.guia-lista li::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--lime);flex:none;margin-top:7px;box-shadow:0 0 0 1px var(--accent-ink)}
+.guia-lista b{color:var(--ink);font-weight:600}
+.guia-pontos{display:flex;gap:5px;justify-content:center;margin-top:18px}
+.guia-pontos i{width:6px;height:6px;border-radius:999px;background:var(--line);transition:.2s}
+.guia-pontos i.on{width:18px;background:var(--ink)}
 @keyframes fadein{from{opacity:0}to{opacity:1}}
 @keyframes sobe{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
 
@@ -365,7 +375,7 @@ const state = { periodo: "mes", stat: "gols", login: "codigo", loginEmail: "", l
   busca: "", filtro: "todas", verTodas: false, novaPelada: false, buscaUsu: "",
   buscaJog: "", filtroJog: "todos", verTodosJog: false, editando: null, addJogador: false, editMetrica: null,
   mercPos: "todos", mercBusca: "", mercOrdem: "media", mercTodos: false, pontRodada: null, faq: 0, renomear: false,
-  capitao: null, capitaoRodada: undefined, confirmEncerrar: false, editScout: null, ajustesAbertos: false, editarTime: false, formTime: null, modal: null, modalVisto: false, votarIds: [], troca: null };
+  capitao: null, capitaoRodada: undefined, confirmEncerrar: false, editScout: null, ajustesAbertos: false, editarTime: false, formTime: null, modal: null, modalVisto: false, guiaPasso: 0, votarIds: [], troca: null };
 
 /* ===================== REGRAS ===================== */
 const CHUTEIRAS = [
@@ -548,6 +558,11 @@ async function entrar(user){
     const salva = app.peladas.find(p => p.id === ler("pelada"));
     const escolhida = salva || (app.peladas.length === 1 ? app.peladas[0] : null);
     if (escolhida) await abrirPelada(escolhida.id); else route();
+    if (guiaPendente(user)) {
+      gravar("guia", "1");
+      sb.auth.updateUser({ data: { guia_visto: true } }).catch(() => {});
+      abrirGuia();
+    }
   });
 }
 
@@ -1830,6 +1845,99 @@ function cardLista(){
     </section>`;
 }
 
+/* ===================== GUIA DO PRIMEIRO ACESSO =====================
+   Abre sozinho uma vez, para quem acabou de criar a conta. Depois fica em Pelada › Como funciona. */
+const GUIA_DESDE = new Date("2026-10-26T00:00:00-03:00");   // contas antigas não recebem o guia
+const guiaPendente = u => !!u && !(u.user_metadata || {}).guia_visto && ler("guia") !== "1" && new Date(u.created_at) >= GUIA_DESDE;
+const ico = nome => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${ICONES[nome]}</svg>`;
+const ICO_VOTO = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 6 9 17l-5-5"/></svg>`;
+const ICO_TIMES = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h4M17 12h4"/><circle cx="12" cy="12" r="3"/></svg>`;
+const ICO_LIVRO = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM4 19V5M9 8h6"/></svg>`;
+const itens = l => `<ul class="guia-lista">${l.map(t => `<li><div>${t}</div></li>`).join("")}</ul>`;
+function passosGuia(){
+  const pres = souPresidente() && !app.modoDev;
+  return [
+    { ico: `<svg viewBox="0 0 24 24" width="26" height="26"><path d="${"M11.1 17.085C10.44 17.085 9.858 16.971 9.354 16.743C8.862 16.503 8.478 16.179 8.202 15.771C7.926 15.351 7.788 14.859 7.788 14.295C7.788 13.767 7.902 13.293 8.13 12.873C8.37 12.453 8.736 12.099 9.228 11.811C9.72 11.523 10.338 11.319 11.082 11.199L14.466 10.641V12.243L11.478 12.765C10.938 12.861 10.542 13.035 10.29 13.287C10.038 13.527 9.912 13.839 9.912 14.223C9.912 14.595 10.05 14.901 10.326 15.141C10.614 15.369 10.98 15.483 11.424 15.483C11.976 15.483 12.456 15.363 12.864 15.123C13.284 14.883 13.608 14.565 13.836 14.169C14.064 13.761 14.178 13.311 14.178 12.819V10.317C14.178 9.837 13.998 9.447 13.638 9.147C13.29 8.835 12.822 8.679 12.234 8.679C11.694 8.679 11.22 8.823 10.812 9.111C10.416 9.387 10.122 9.747 9.93 10.191L8.238 9.345C8.418 8.865 8.712 8.445 9.12 8.085C9.528 7.713 10.002 7.425 10.542 7.221C11.094 7.017 11.676 6.915 12.288 6.915C13.056 6.915 13.734 7.059 14.322 7.347C14.922 7.635 15.384 8.037 15.708 8.553C16.044 9.057 16.212 9.645 16.212 10.317V16.869H14.268V15.105L14.682 15.159C14.454 15.555 14.16 15.897 13.8 16.185C13.452 16.473 13.05 16.695 12.594 16.851C12.15 17.007 11.652 17.085 11.1 17.085Z"}" fill="#0E0E0E" transform="translate(-2.4 -2.4) scale(1.2)"/></svg>`,
+      titulo: "Bem-vindo ao Anotou",
+      corpo: `<p class="note">Aqui fica tudo da sua pelada: lista de quem vai, votação, times, rankings e Cartola. Em 1 minuto você entende cada parte.</p>` },
+    { ico: ico("casa"), titulo: "Início",
+      corpo: itens([
+        "<b>Seu pote</b>: seu nível na pelada. Ele serve pra montar times equilibrados.",
+        "<b>Seus números</b>: gols, assistências e jogos da temporada.",
+        "<b>Chuteira</b>: sobe de nível com seus gols, de Plástico a Diamante." ]) },
+    { ico: ico("agenda"), titulo: "Lista de confirmação",
+      corpo: itens([
+        "Abre sozinha <b>3 dias antes</b> do jogo. É só tocar em <b>Vou</b> ou <b>Não vou</b>.",
+        "<b>Mensalista</b> confirmou, está dentro. <b>Avulso</b> entra na lista de espera e sobe se sobrar vaga.",
+        "A lista <b>fecha 2 horas antes</b> do jogo. O prazo aparece sempre no card." ]) },
+    { ico: ICO_VOTO, titulo: "Votação",
+      corpo: itens([
+        "Depois de confirmar, você dá nota <b>de 1 a 6</b> pra quem também vai.",
+        "O voto é <b>secreto</b> e dá pra mudar até a lista fechar.",
+        "Quem confirmar depois de você aparece pra votar na próxima vez que abrir o app." ]) },
+    { ico: ICO_TIMES, titulo: "Times da noite",
+      corpo: itens([
+        "Escolha sua <b>posição principal</b> em Pelada. Ela vale pro sorteio e pro Cartola.",
+        "Com a lista cheia, o presidente sorteia <b>4 times equilibrados</b> pelas notas e posições.",
+        "Na aba <b>Times da noite</b> você vê seu time, quem joga agora e o placar." ]) },
+    { ico: ico("barras"), titulo: "Jogadores e rankings",
+      corpo: itens([
+        "<b>Jogadores</b>: o elenco da pelada, com o pote e os números de cada um.",
+        "<b>Rankings</b>: artilheiros, garçons (quem dá mais assistências) e presença.",
+        "Tudo é atualizado quando o presidente anota a partida." ]) },
+    { ico: ico("estrela"), titulo: "Cartola da pelada",
+      corpo: itens([
+        "Monte seu time com <b>C$ 100</b> de saldo, escalando jogadores da própria pelada.",
+        "O <b>mercado abre no dia do jogo à meia-noite</b> e fecha na hora que a bola rola. Só dá pra escalar quem confirmou.",
+        "Os pontos contam depois que o presidente sobe as estatísticas. Dispute a liga com a galera." ]) + `<p class="hint">Só aparece se a sua pelada tiver o Cartola ligado.</p>` },
+    { ico: ico("agenda"), titulo: pres ? "Pelada · você é o presidente" : "Pelada",
+      corpo: pres ? itens([
+        "Defina <b>dia, horário e vagas</b>: é isso que abre a lista e o mercado do Cartola.",
+        "Anote cada partida: <b>gols, assistências</b> e as outras métricas.",
+        "Escolha como o pote é calculado, organize mensalistas e avulsos e sorteie os times." ])
+      : itens([
+        "Os dados da pelada, o elenco e o pote de cada um.",
+        "É aqui que você escolhe sua <b>posição</b> e pode trocar de pelada ou sair da conta.",
+        "Quer rever este guia? Ele fica aqui, em <b>Como funciona o Anotou</b>." ]) },
+    { ico: ICO_LIVRO, titulo: "Glossário",
+      corpo: itens([
+        "<b>Pote</b>: seu nível de 1 (mais forte) em diante, usado pra equilibrar os times.",
+        "<b>Mensalista</b>: paga o mês e tem vaga garantida se confirmar.",
+        "<b>Avulso</b>: joga quando sobra vaga. Fica na lista de espera.",
+        "<b>Garçom</b>: quem dá a assistência pro gol.",
+        "<b>Rodada</b>: cada pelada no Cartola. <b>C$</b> são as cartoletas, o dinheiro do jogo." ]) }
+  ];
+}
+function corpoGuia(){
+  const passos = passosGuia();
+  const i = Math.min(state.guiaPasso, passos.length - 1), p = passos[i], ultimo = i === passos.length - 1;
+  return `<button class="x" data-act="fecharModal" aria-label="Fechar">×</button>
+    <div class="guia-ico">${p.ico}</div>
+    <div class="eyebrow">Como funciona · ${i + 1} de ${passos.length}</div>
+    <div class="h2">${p.titulo}</div>
+    ${p.corpo}
+    <div class="guia-pontos" aria-hidden="true">${passos.map((_, k) => `<i class="${k === i ? "on" : ""}"></i>`).join("")}</div>
+    <div class="dois">
+      ${i ? `<button class="btn ghost" data-act="guiaPasso" data-delta="-1">Voltar</button>` : `<button class="btn ghost" data-act="fecharModal">Pular</button>`}
+      ${ultimo ? `<button class="btn" data-act="fecharModal">Começar</button>` : `<button class="btn" data-act="guiaPasso" data-delta="1">Próximo</button>`}
+    </div>`;
+}
+function abrirGuia(){
+  state.guiaPasso = 0;
+  state.modal = "guia";
+  state.modalVisto = true;   // a lista de confirmação abre depois, quando a pessoa fechar o guia
+  renderModal();
+}
+const cardGuia = () => `
+    <section class="card fade" style="animation-delay:.06s">
+      <div class="card-head" style="margin-bottom:6px">
+        <div><div class="eyebrow">Ajuda</div><div class="h2">Como funciona o Anotou</div></div>
+        <div class="guia-ico" style="margin:0;flex:none">${ICO_LIVRO}</div>
+      </div>
+      <p class="note">Lista, votação, times, rankings, Cartola e o glossário da pelada.</p>
+      <button class="btn ghost sm" data-act="abrirGuia" style="margin-top:12px">Ver o guia</button>
+    </section>`;
+
 function popupAutomatico(){
   if (!app.user || app.modoDev || !app.pelada || !app.membro || state.modalVisto || state.modal) return;
   if (listaStatus() !== "aberta") return;
@@ -1841,6 +1949,7 @@ function popupAutomatico(){
 function renderModal(){
   const el = document.getElementById("modal");
   const t = state.modal, j = app.jogo;
+  if (t === "guia") { el.innerHTML = `<div class="sheet" data-act="nada" role="dialog" aria-modal="true" aria-label="Como funciona o Anotou">${corpoGuia()}</div>`; return; }
   if (!t || !j || !app.pelada) { el.innerHTML = ""; return; }
   const fechar = `<button class="x" data-act="fecharModal" aria-label="Fechar">×</button>`;
   const prazo = `<div class="prazo">${RELOGIO}<div>${textoPrazo()}</div></div>`;
@@ -2052,6 +2161,7 @@ function renderPelada(){
       <div class="eyebrow">Cartola e sorteio</div><div class="h2">Sua posição</div>
       ${seletorPosicao(true)}
     </section>
+    ${cardGuia()}
     <section class="card fade" style="animation-delay:.05s">
       <div class="card-head"><div><div class="eyebrow">Elenco</div><div class="h2">Jogadores</div></div></div>
       <ul class="list">
@@ -2116,7 +2226,8 @@ function renderPeladaAdmin(){
     ${cardDados()}
     ${cardPotes()}
     ${cardMetricas()}
-    <section class="card fade" id="cardJog" style="animation-delay:.2s"></section>`;
+    <section class="card fade" id="cardJog" style="animation-delay:.2s"></section>
+    ${cardGuia()}`;
   renderCardJogadores();
 }
 
@@ -2562,6 +2673,8 @@ const ACOES = {
     renderModal();
   }),
   fecharModal: () => { state.modal = null; renderModal(); route(true); },
+  abrirGuia: () => abrirGuia(),
+  guiaPasso: el => { state.guiaPasso = Math.max(0, state.guiaPasso + Number(el.dataset.delta)); renderModal(); },
   nada: () => {},
   instalar: async () => {
     if (!pedidoInstalar) return;
