@@ -1032,15 +1032,14 @@ function renderRanking(limite, fonte, titulo){
 }
 
 /* ===================== CARTOLA DA PELADA (Slides 08 a 11) =====================
-   Cada jogador monta um time de 6 (sem goleiro) com C$ 60. Compras, vendas e capitão passam
+   Cada jogador monta um time de 6 com C$ 60. Compras, vendas e capitão passam
    por funções do banco, que conferem saldo, vagas e se o mercado está aberto. */
-const POSICOES = ["GOL", "ZAG", "MEI", "ATA"];
-// formações: só linha (ZAG-MEI-ATA). Goleiro não entra no Cartola: na pelada ele não é fixo
-const POSICOES_CARTOLA = ["ZAG", "MEI", "ATA"];
+// só posições de linha: na pelada o goleiro não é fixo, então ele não existe no app
+const POSICOES = ["ZAG", "MEI", "ATA"];
 const TAM_TIME = 6;
 const ESQUEMAS = [["2-2-2", "Equilibrado"], ["3-2-1", "Defensivo"], ["2-1-3", "Ofensivo"], ["2-3-1", "Meio forte"]];
-const vagasDe = esquema => { const [z, m, a] = (esquema || "2-2-2").split("-").map(Number); return { GOL: 0, ZAG: z, MEI: m, ATA: a }; };
-const noMercado = m => m.posicao && m.posicao !== "GOL";
+const vagasDe = esquema => { const [z, m, a] = (esquema || "2-2-2").split("-").map(Number); return { ZAG: z, MEI: m, ATA: a }; };
+const noMercado = m => !!m.posicao;
 const esquemaAtual = () => (cart().meuTime || {}).esquema || "2-2-2";
 
 /* ---------- Escudo do time (desenhado na hora, a partir de forma, padrão, cores e sigla) ---------- */
@@ -1074,7 +1073,7 @@ function escudoSvg(e, tam = 40){
       fill="${corTexto}" stroke="${e.padrao === "liso" ? "none" : "rgba(12,12,12,.55)"}" stroke-width="2" paint-order="stroke">${esc(e.sigla)}</text>
   </svg>`;
 }
-const NOME_POS = { GOL: ["goleiro", "goleiros"], ZAG: ["zagueiro", "zagueiros"], MEI: ["meia", "meias"], ATA: ["atacante", "atacantes"] };
+const NOME_POS = { ZAG: ["zagueiro", "zagueiros"], MEI: ["meia", "meias"], ATA: ["atacante", "atacantes"] };
 const DIAS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
 const DIAS_CURTOS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const CAPITAO = 1.5;
@@ -1163,7 +1162,7 @@ function liga(){
 const minhaPosicaoLiga = () => { const i = liga().findIndex(t => t.jogador_id === app.user.id); return i < 0 ? null : i + 1; };
 function faltamNoTime(escalados){
   const vagas = vagasDe(esquemaAtual());
-  const faltas = POSICOES_CARTOLA.map(p => [p, vagas[p] - escalados.filter(e => e.posicao === p).length]).filter(([, n]) => n > 0);
+  const faltas = POSICOES.map(p => [p, vagas[p] - escalados.filter(e => e.posicao === p).length]).filter(([, n]) => n > 0);
   if (!faltas.length) return "Time completo";
   const partes = faltas.map(([p, n]) => `${n} ${NOME_POS[p][n > 1 ? 1 : 0]}`);
   const total = faltas.reduce((s, [, n]) => s + n, 0);
@@ -1402,7 +1401,7 @@ function renderMercado(){
       </div>
       <label class="search">${LUPA}<input class="input" placeholder="Buscar jogador" value="${esc(state.mercBusca)}" data-input="mercBusca" aria-label="Buscar jogador"></label>
       <div class="seg" style="margin-top:12px">
-        ${[["todos", "Todos"], ...POSICOES_CARTOLA.map(p => [p, p])].map(([k, v]) => `<button class="${state.mercPos === k ? "on" : ""}" data-act="mercPos" data-valor="${k}">${v}</button>`).join("")}
+        ${[["todos", "Todos"], ...POSICOES.map(p => [p, p])].map(([k, v]) => `<button class="${state.mercPos === k ? "on" : ""}" data-act="mercPos" data-valor="${k}">${v}</button>`).join("")}
       </div>
       <div id="listaMerc"></div>
       ${semPosicao ? `<p class="hint">${plural(semPosicao, "jogador ainda não tem", "jogadores ainda não têm")} posição e não aparece${semPosicao > 1 ? "m" : ""} no mercado. O presidente define em Pelada → Elenco → Editar.</p>` : ""}
@@ -1464,7 +1463,7 @@ function renderPontuacao(){
   const daRodada = cart().pontosTime.filter(x => x.rodada_id === rod.id);
   const mediaLiga = daRodada.length ? daRodada.reduce((s, x) => s + Number(x.pontos), 0) / daRodada.length : 0;
   const diff = total - mediaLiga;
-  const ordemPos = { ATA: 0, MEI: 1, ZAG: 2, GOL: 3 };
+  const ordemPos = { ATA: 0, MEI: 1, ZAG: 2 };
   const meus = escalacaoDe(rod.id).sort((a, b) => ordemPos[a.posicao] - ordemPos[b.posicao]);
   const linhas = meus.map(e => {
     const base = Number((resultado(rod.id, e.atleta_id) || {}).pontos || 0);
@@ -1565,10 +1564,10 @@ function renderRegras(){
     <li><span class="cod">${r.codigo}</span><div class="who"><b>${esc(r.nome)}</b>${sub(r) ? `<span>${sub(r)}</span>` : ""}</div>
       <span class="${r.pontos < 0 ? "val-neg" : "val-pos"}">${sinal(Number(r.pontos))}</span></li>`).join("")}</ul>`;
   const passos = [
-    ["Escale 6 jogadores", "Só jogadores de linha (goleiro não entra, porque na pelada ele não é fixo), numa das 4 formações: 2-2-2 (equilibrado), 3-2-1 (defensivo), 2-1-3 (ofensivo) ou 2-3-1 (meio forte). Tudo dentro do seu saldo de cartoletas."],
+    ["Escale 6 jogadores", "Zagueiros, meias e atacantes, numa das 4 formações: 2-2-2 (equilibrado), 3-2-1 (defensivo), 2-1-3 (ofensivo) ou 2-3-1 (meio forte). Tudo dentro do seu saldo de cartoletas."],
     ["Escolha o capitão", "A pontuação dele vale 1,5×. Dá pra trocar até o mercado fechar."],
     ["Mercado só no dia da pelada", "Abre à 0h do dia do jogo e fecha 1 hora antes da pelada. Só dá pra escalar quem confirmou presença."],
-    ["Pontos depois do jogo", "Os pontos só contam quando o presidente sobe as estatísticas: gols, assistências, defesas e cartões."],
+    ["Pontos depois do jogo", "Os pontos só contam quando o presidente sobe as estatísticas: gols, assistências, placares da noite e cartões."],
     ["Preços se atualizam", "Quem joga bem valoriza, quem joga mal desvaloriza. Seu patrimônio acompanha."]
   ];
   view.innerHTML = `
@@ -2013,8 +2012,7 @@ function seletorPosicao(card){
   const atual = app.membro && app.membro.posicao;
   if (!app.membro) return "";
   return `<div class="${card ? "" : "box"}" style="margin-top:12px">
-    <p class="note" style="margin:0 0 10px">${atual === "GOL" ? `Você joga de <b>goleiro</b>. Vale pro sorteio dos times; goleiro não entra no Cartola.`
-      : atual ? `Você joga de <b>${NOME_POS[atual][0]}</b>. Vale pro sorteio dos times e pro Cartola.` : "<b>Escolha sua posição principal</b> pra entrar no sorteio dos times e no Cartola."}</p>
+    <p class="note" style="margin:0 0 10px">${atual ? `Você joga de <b>${NOME_POS[atual][0]}</b>. Vale pro sorteio dos times e pro Cartola.` : "<b>Escolha sua posição principal</b> pra entrar no sorteio dos times e no Cartola."}</p>
     <div class="seg full">${POSICOES.map(k => `<button class="${atual === k ? "on" : ""}" data-act="minhaPosicao" data-valor="${k}">${cap(NOME_POS[k][0])}</button>`).join("")}</div>
   </div>`;
 }
@@ -2031,7 +2029,7 @@ function notaSorteio(id){
   return (soma + PESO_BASE * base) / (votos + PESO_BASE);
 }
 
-// distribui por posição (cada time com a mesma quantidade de goleiros, zagueiros, meias e atacantes)
+// distribui por posição (cada time com a mesma quantidade de zagueiros, meias e atacantes)
 // e depois troca jogadores da mesma posição entre times até as forças ficarem o mais parelhas possível
 function sortearTimes(ids, n){
   const nota = new Map(ids.map(id => [id, notaSorteio(id)]));
@@ -2042,7 +2040,7 @@ function sortearTimes(ids, n){
   const tentativas = [];
   for (let k = 0; k < 120; k++) {
     const ts = Array.from({ length: n }, () => []);
-    for (const p of ["GOL", "ZAG", "MEI", "ATA", "LIN"]) {
+    for (const p of ["ZAG", "MEI", "ATA", "LIN"]) {
       const grupo = ids.filter(id => pos(id) === p).sort((a, b) => (nota.get(b) + Math.random() * 0.6) - (nota.get(a) + Math.random() * 0.6));
       for (const id of grupo) {
         const livres = ts.filter(t => t.length < cap_);
@@ -2087,7 +2085,7 @@ function renderTimes(){
   const emCampo = app.confrontos.find(c => c.status === "em_campo");
   const jogados = app.confrontos.filter(c => c.status === "encerrado");
   const meuTime = (app.timesJogo.find(t => t.jogador_id === app.user.id) || {}).time;
-  const ordemPos = { GOL: 0, ZAG: 1, MEI: 2, ATA: 3 };
+  const ordemPos = { ZAG: 1, MEI: 2, ATA: 3 };
   const fmtForca = ids => fmt(ids.reduce((s, id) => s + notaSorteio(id), 0) / ids.length);
   const resumoPos = ids => POSICOES.map(p => [p, ids.filter(id => (membroDe(id) || {}).posicao === p).length]).filter(([, q]) => q).map(([p, q]) => `${q} ${p}`).join(" · ");
   // sugestão do próximo jogo: os dois times que menos jogaram (e não estão em campo)
