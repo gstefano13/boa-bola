@@ -1078,7 +1078,7 @@ const NOME_POS = { GOL: ["goleiro", "goleiros"], ZAG: ["zagueiro", "zagueiros"],
 const DIAS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
 const DIAS_CURTOS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const CAPITAO = 1.5;
-const GRUPOS_SCOUT = [["Ataque", ["G", "A", "FT", "FD", "FF", "FS"]], ["Defesa e goleiro", ["DS", "SG", "DE", "DP", "V"]], ["Negativos", ["GC", "GS", "PP", "FC", "CA", "CV"]]];
+const GRUPOS_SCOUT = [["Ataque", ["G", "A", "FT", "FD", "FF", "FS"]], ["Defesa", ["DS", "SG", "V"]], ["Negativos", ["GC", "PP", "FC", "CA", "CV"]]];
 const SCOUTS_SIMPLES = ["G", "A", "V", "SG", "GC", "CA", "CV"];   // o básico que todo organizador consegue anotar
 // scouts com a configuração da pelada: ligado/desligado e pontos trocados pelo presidente
 const scoutsDaPelada = () => {
@@ -1560,7 +1560,7 @@ function renderRegras(){
   const regras = scoutsDaPelada().filter(r => r.ativo);
   const grupo = codigos => codigos.map(c => regras.find(r => r.codigo === c)).filter(Boolean);
   const card = (eyebrow, titulo, codigos) => { const itens = grupo(codigos); return itens.length ? `<section class="card fade"><div class="eyebrow">${eyebrow}</div><div class="h2">${titulo}</div>${lista(itens)}</section>` : ""; };
-  const sub = r => r.codigo === "SG" ? "Zagueiros: 1 por jogo que o time vencer sem sofrer gol" : r.posicoes ? (r.posicoes.length > 1 ? "Goleiro e zagueiros" : "Goleiro") : ["G", "A", "DS", "V"].includes(r.codigo) ? "Todas as posições" : "";
+  const sub = r => r.codigo === "SG" ? "Zagueiros: 1 por jogo que o time vencer sem sofrer gol" : ["G", "A", "DS", "V"].includes(r.codigo) ? "Todas as posições" : "";
   const lista = itens => `<ul class="list" style="margin-top:8px">${itens.map(r => `
     <li><span class="cod">${r.codigo}</span><div class="who"><b>${esc(r.nome)}</b>${sub(r) ? `<span>${sub(r)}</span>` : ""}</div>
       <span class="${r.pontos < 0 ? "val-neg" : "val-pos"}">${sinal(Number(r.pontos))}</span></li>`).join("")}</ul>`;
@@ -1598,8 +1598,8 @@ function renderRegras(){
 /* ---------- Cartola · cruzamento com a partida ----------
    O presidente anota tudo na partida (gols, assistências e "outras métricas").
    Ao encerrar a rodada, o banco transforma isso em scouts; aqui é só a prévia. */
-const METRICA_DO_SCOUT = { V: "vitorias", DE: "defesas", CA: "cartao_amarelo", CV: "cartao_vermelho", GC: "gol_contra" };
-const CODIGOS_LANCE = ["FT", "FD", "FF", "FS", "DS", "SG", "DE", "DP", "V", "GC", "GS", "PP", "FC", "CA", "CV"];
+const METRICA_DO_SCOUT = { V: "vitorias", CA: "cartao_amarelo", CV: "cartao_vermelho", GC: "gol_contra" };
+const CODIGOS_LANCE = ["FT", "FD", "FF", "FS", "DS", "SG", "V", "GC", "PP", "FC", "CA", "CV"];
 function scoutDaMetrica(metrica){
   const k = String(metrica).toLowerCase();
   const mapeado = Object.keys(METRICA_DO_SCOUT).find(c => METRICA_DO_SCOUT[c] === k);
@@ -1643,7 +1643,7 @@ function scoutsDaPartida(partidaId){
 function cardCartolaScouts(){
   const todos = scoutsDaPelada();
   const ligados = todos.filter(s => s.ativo).length;
-  const onde = s => s.codigo === "SG" ? "Zagueiros · sai sozinho dos placares da noite" : s.posicoes ? (s.posicoes.length > 1 ? "Goleiro e zagueiros" : "Só goleiro") : "Todas as posições";
+  const onde = s => s.codigo === "SG" ? "Zagueiros · sai sozinho dos placares da noite" : "Todas as posições";
   return `
     <section class="card fade" style="animation-delay:.06s">
       <div class="eyebrow">Cartola da pelada</div><div class="h2">Scouts que contam</div>
@@ -1652,7 +1652,7 @@ function cardCartolaScouts(){
         <button class="btn ghost sm" data-act="cartPreset" data-valor="simples">Usar o simples</button>
         <button class="btn ghost sm" data-act="cartPreset" data-valor="completo">Ligar todos</button>
       </div>
-      <p class="hint">Simples: gol, assistência, vitória, defesa difícil, jogo sem sofrer gol, gol contra e cartões. As mudanças valem a partir da próxima rodada encerrada.</p>
+      <p class="hint">Simples: gol, assistência, vitória, baliza zero, gol contra e cartões. As mudanças valem a partir da próxima rodada encerrada.</p>
       ${GRUPOS_SCOUT.map(([titulo, codigos]) => `
         <div class="sub-title" style="margin-top:22px">${titulo}</div>
         <ul class="list">
@@ -2013,7 +2013,8 @@ function seletorPosicao(card){
   const atual = app.membro && app.membro.posicao;
   if (!app.membro) return "";
   return `<div class="${card ? "" : "box"}" style="margin-top:12px">
-    <p class="note" style="margin:0 0 10px">${atual ? `Você joga de <b>${NOME_POS[atual][0]}</b>. Vale pro sorteio dos times e pro Cartola.` : "<b>Escolha sua posição principal</b> pra entrar no sorteio dos times e no Cartola."}</p>
+    <p class="note" style="margin:0 0 10px">${atual === "GOL" ? `Você joga de <b>goleiro</b>. Vale pro sorteio dos times; goleiro não entra no Cartola.`
+      : atual ? `Você joga de <b>${NOME_POS[atual][0]}</b>. Vale pro sorteio dos times e pro Cartola.` : "<b>Escolha sua posição principal</b> pra entrar no sorteio dos times e no Cartola."}</p>
     <div class="seg full">${POSICOES.map(k => `<button class="${atual === k ? "on" : ""}" data-act="minhaPosicao" data-valor="${k}">${cap(NOME_POS[k][0])}</button>`).join("")}</div>
   </div>`;
 }
