@@ -82,6 +82,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .pill.ghost{background:rgba(255,255,255,.1);color:#E9E9E9}
 .pill.soft{background:var(--soft);border:1px solid var(--line)}
 .pill.off{background:var(--soft);border:1px solid var(--line);color:var(--ink-3)}
+button.pill{font:inherit;font-size:12.5px;font-weight:500;border:0;cursor:pointer;color:var(--ink)}
 .pote-meta p{font-size:13px;color:#A9A9A9;margin-top:8px}
 .hero-stats{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid rgba(255,255,255,.12);padding-top:14px;position:relative}
 .hero-stats div{padding-right:10px;min-width:0}
@@ -1826,7 +1827,9 @@ function linhaLista(id, i, espera){
     <span class="num${espera ? "" : " lime"}">${i + 1}</span>
     ${avatarDe(id)}
     <div class="who"><b>${esc(nomeDe(id))}${id === app.user.id ? " · você" : ""}</b><span>${m ? cap(m.tipo) : ""}${subiu ? " · subiu pelo presidente" : ""}</span></div>
-    ${!espera && id !== app.user.id && situacaoDe(app.user.id) === "confirmado" ? `<span class="pill ${notaMinha(id) ? "soft" : "off"}">${notaMinha(id) ? `Pote ${7 - notaMinha(id)}` : "Falta votar"}</span>` : ""}
+    ${!espera && id !== app.user.id && situacaoDe(app.user.id) === "confirmado" ? (listaStatus() === "aberta"
+      ? `<button class="pill ${notaMinha(id) ? "soft" : "lime"}" data-act="votarUm" data-jogador="${id}" aria-label="Votar em ${esc(nomeDe(id))}">${notaMinha(id) ? `Pote ${7 - notaMinha(id)} · mudar` : "Votar"}</button>`
+      : `<span class="pill soft">${notaMinha(id) ? `Pote ${7 - notaMinha(id)}` : "Sem voto"}</span>`) : ""}
     ${pres && espera ? `<button class="btn sm" data-act="subirEspera" data-jogador="${id}" data-sobe="1">Subir</button>` : ""}
     ${pres && subiu ? `<button class="btn ghost sm" data-act="subirEspera" data-jogador="${id}" data-sobe="0">Tirar</button>` : ""}
   </li>`;
@@ -2751,6 +2754,15 @@ const ACOES = {
     route(true);
     aviso(`${id === app.user.id ? "Você está" : `${nomeDe(id)} está`} na lista`);
   }),
+  // toque no nome da lista: abre a votação começando por essa pessoa, depois quem ainda falta
+  votarUm: el => {
+    const id = el.dataset.jogador;
+    const resto = naLista().filter(x => x !== app.user.id && x !== id);
+    state.votarIds = [id, ...resto.filter(x => !notaMinha(x)), ...resto.filter(x => notaMinha(x))];
+    state.votarIds.forEach(x => state.votosVistos.add(x));
+    state.modal = "votar";
+    renderModal();
+  },
   abrirVotacao: () => {
     const outros = naLista().filter(id => id !== app.user.id);
     state.votarIds = [...outros.filter(id => !notaMinha(id)), ...outros.filter(id => notaMinha(id))];
