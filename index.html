@@ -257,6 +257,8 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .sobe{color:var(--accent-ink)}
 .desce{color:var(--ink-3)}
 .pos-tag{font-size:11px;font-weight:500;padding:2px 7px;border-radius:999px;border:1px solid var(--line);background:var(--soft);color:var(--ink-2);margin-left:6px;vertical-align:2px}
+.pos-tag.duvida{background:#FEF3C7;border-color:#F59E0B;color:#92400E}
+.slot .bola i.duvida{left:-6px;right:auto;background:#F59E0B;color:#fff}
 .select-pill{appearance:none;-webkit-appearance:none;border:1px solid var(--line);background:var(--soft) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%230C0C0C' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 12px center;border-radius:999px;padding:8px 30px 8px 14px;font:inherit;font-size:13px;font-weight:500;color:var(--ink);flex:none;cursor:pointer}
 .num{width:28px;height:28px;border-radius:50%;background:var(--soft);border:1px solid var(--line);display:grid;place-items:center;font-size:13px;font-weight:600;flex:none}
 .num.lime{background:var(--lime);border-color:var(--lime)}
@@ -1051,6 +1053,8 @@ const TAM_TIME = 6;
 const ESQUEMAS = [["2-2-2", "Equilibrado"], ["3-2-1", "Defensivo"], ["2-1-3", "Ofensivo"], ["2-3-1", "Meio forte"]];
 const vagasDe = esquema => { const [z, m, a] = (esquema || "2-2-2").split("-").map(Number); return { ZAG: z, MEI: m, ATA: a }; };
 const noMercado = m => !!m.posicao;
+// lista de espera: pode ser escalado, mas é dúvida (se não jogar, faz 0 ponto)
+const duvida = id => situacaoDe(id) === "espera";
 const esquemaAtual = () => (cart().meuTime || {}).esquema || "2-2-2";
 
 /* ---------- Escudo do time (desenhado na hora, a partir de forma, padrão, cores e sigla) ---------- */
@@ -1331,8 +1335,8 @@ function renderCartola(){
   }
   const vaga = (pos_, e) => e ? `
       <button class="slot" data-act="cartCapitao" data-id="${e.atleta_id}" ${aberto ? "" : "disabled"} aria-label="Fazer ${esc(nomeDe(e.atleta_id))} capitão">
-        <span class="bola">${esc(iniciais(membroDe(e.atleta_id) ? membroDe(e.atleta_id).jogadores.nome : "?"))}${state.capitao === e.atleta_id ? "<i>C</i>" : ""}</span>
-        <b>${esc(nomeDe(e.atleta_id))}</b><small>C$ ${cs(precoDe(e.atleta_id))}</small>
+        <span class="bola">${esc(iniciais(membroDe(e.atleta_id) ? membroDe(e.atleta_id).jogadores.nome : "?"))}${state.capitao === e.atleta_id ? "<i>C</i>" : ""}${duvida(e.atleta_id) ? `<i class="duvida" title="Dúvida: está na lista de espera">?</i>` : ""}</span>
+        <b>${esc(nomeDe(e.atleta_id))}</b><small>${duvida(e.atleta_id) ? "Dúvida · " : ""}C$ ${cs(precoDe(e.atleta_id))}</small>
       </button>` : `
       <a class="slot" href="#mercado" data-act="cartVaga" data-pos="${pos_}">
         <span class="bola vazia">+</span><b class="vazio">Escalar</b><small></small>
@@ -1368,6 +1372,7 @@ function renderCartola(){
       <p class="hint">${!r ? "O time abre quando o presidente começar a primeira rodada."
         : aberto ? "Toque num jogador para fazer dele o capitão (pontos ×1,5). Vagas vazias levam ao mercado."
         : "Mercado fechado: o time fica travado até a próxima rodada."}</p>
+      ${escalados.some(e => duvida(e.atleta_id)) ? `<p class="hint"><b>?</b> = dúvida: está na lista de espera. Se não jogar, faz 0 ponto.</p>` : ""}
       <div class="resumo">
         <div><b>C$ ${cs(custo)}</b><span>Custo do time</span></div>
         <div><b>C$ ${cs(saldo)}</b><span>Saldo</span></div>
@@ -1429,7 +1434,7 @@ function renderListaMerc(){
   const busca = state.mercBusca.trim().toLowerCase();
   const ordem = { media: (a, b) => b.media - a.media, ultima: (a, b) => b.ultima - a.ultima, caro: (a, b) => b.preco - a.preco, barato: (a, b) => a.preco - b.preco }[state.mercOrdem];
   const todos = app.membros.filter(noMercado)
-    .filter(m => situacaoDe(m.jogador_id) === "confirmado" || escalados.some(e => e.atleta_id === m.jogador_id))
+    .filter(m => ["confirmado", "espera"].includes(situacaoDe(m.jogador_id)) || escalados.some(e => e.atleta_id === m.jogador_id))
     .filter(m => state.mercPos === "todos" || m.posicao === state.mercPos)
     .filter(m => !busca || `${m.jogadores.nome} ${m.jogadores.apelido || ""}`.toLowerCase().includes(busca))
     .map(m => ({ m, preco: Number(m.preco), meu: escalados.some(e => e.atleta_id === m.jogador_id), ...infoAtleta(m.jogador_id) }))
@@ -1437,14 +1442,15 @@ function renderListaMerc(){
   const lista = state.mercTodos ? todos : todos.slice(0, 7);
   const cheio = p => escalados.filter(e => e.posicao === p).length >= vagasDe(esquemaAtual())[p];
   el.innerHTML = `
-    <p class="hint">Só aparecem os ${naLista().length} confirmados na pelada ${app.jogo ? `de ${dataCurta(app.jogo.data)}` : ""}.</p>
+    <p class="hint">Aparecem os ${naLista().length} confirmados na pelada ${app.jogo ? `de ${dataCurta(app.jogo.data)}` : ""}${naEspera().length ? ` e os ${naEspera().length} da lista de espera, marcados como <b>dúvida</b>: se não jogarem, fazem 0 ponto` : ""}.</p>
     ${lista.length ? `<ul class="list" style="margin-top:6px">
       ${lista.map(x => {
         const pode = aberto && (x.meu || (saldo >= x.preco && !cheio(x.m.posicao)));
         return `
         <li>
           ${avatarDe(x.m.jogador_id)}
-          <div class="who"><b>${esc(nomeDe(x.m.jogador_id))}<span class="pos-tag">${x.m.posicao}</span></b><span>${situacaoDe(x.m.jogador_id) === "confirmado" ? `Méd. ${pts(x.media)} · Últ. ${pts(x.ultima)}` : "Não confirmou · venda ele"}</span></div>
+          <div class="who"><b>${esc(nomeDe(x.m.jogador_id))}<span class="pos-tag">${x.m.posicao}</span>${duvida(x.m.jogador_id) ? `<span class="pos-tag duvida">Dúvida</span>` : ""}</b><span>${situacaoDe(x.m.jogador_id) === "confirmado" ? `Méd. ${pts(x.media)} · Últ. ${pts(x.ultima)}`
+            : duvida(x.m.jogador_id) ? `Lista de espera · ${naEspera().indexOf(x.m.jogador_id) + 1}º` : "Saiu da lista · venda ele"}</span></div>
           <div class="preco"><b>C$ ${cs(x.preco)}</b>${x.variacao ? `<small class="${x.variacao > 0 ? "sobe" : "desce"}">${x.variacao > 0 ? "↑" : "↓"} ${cs(Math.abs(x.variacao))}</small>` : ""}</div>
           ${temTime ? `<button class="btn sm ${x.meu ? "ghost" : ""}" data-act="${x.meu ? "cartVender" : "cartComprar"}" data-id="${x.m.jogador_id}" ${pode ? "" : "disabled"}>${x.meu ? "Vender" : "Comprar"}</button>` : ""}
         </li>`;
@@ -1577,7 +1583,8 @@ function renderRegras(){
   const passos = [
     ["Escale 6 jogadores", "Zagueiros, meias e atacantes, numa das 4 formações: 2-2-2 (equilibrado), 3-2-1 (defensivo), 2-1-3 (ofensivo) ou 2-3-1 (meio forte). Tudo dentro do seu saldo de cartoletas."],
     ["Escolha o capitão", "A pontuação dele vale 1,5×. Dá pra trocar até o mercado fechar."],
-    ["Mercado só no dia da pelada", "Abre à 0h do dia do jogo e fecha 1 hora antes da pelada. Só dá pra escalar quem confirmou presença."],
+    ["Mercado só no dia da pelada", "Abre à 0h do dia do jogo e fecha 1 hora antes da pelada. Dá pra escalar quem confirmou presença e quem está na lista de espera."],
+    ["Cuidado com as dúvidas", "Quem está na lista de espera aparece como dúvida: pode subir pra lista e jogar, ou ficar de fora. Se não jogar, faz 0 ponto. Escalar ou não é estratégia sua."],
     ["Pontos depois do jogo", "Os pontos só contam quando o presidente sobe as estatísticas: gols, assistências, placares da noite e cartões."],
     ["Preços se atualizam", "Quem joga bem valoriza, quem joga mal desvaloriza. Seu patrimônio acompanha."]
   ];
@@ -1733,7 +1740,7 @@ function cardCartolaAdmin(){
         <div class="field" style="grid-column:1/-1"><span>Nome da liga</span>
           <form data-form="ligaNome" class="row"><input class="input" name="nome" maxlength="40" value="${esc(P.cartola_liga_nome || "")}" placeholder="Liga ${esc(P.nome)}" aria-label="Nome da liga"><button class="btn sm">Salvar</button></form></div>
       </div>
-      <p class="hint" style="margin-top:10px">O mercado abre sozinho à 0h do dia da pelada e fecha 1 hora antes do jogo. Só entram no mercado os jogadores confirmados na lista.</p>
+      <p class="hint" style="margin-top:10px">O mercado abre sozinho à 0h do dia da pelada e fecha 1 hora antes do jogo. Entram no mercado os confirmados na lista e, como dúvida, os da lista de espera.</p>
       ${!r ? `
         <p class="note" style="margin-top:14px">${encerradas().length ? "Nenhuma rodada aberta." : "O Cartola ainda não começou."} Antes, defina a posição dos jogadores no Elenco (Editar).</p>
         <button class="btn block" data-act="cartAbrir">Abrir rodada ${cart().rodadas.length + 1}</button>`
