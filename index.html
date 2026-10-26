@@ -91,8 +91,8 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 
 /* patrocinador */
 .sponsor{display:flex;gap:14px;align-items:center;padding:16px}
-.sponsor .logo{width:64px;height:64px;border-radius:12px;background:#F2F2F2;border:1px dashed #E0E0E0;display:grid;place-items:center;font-size:11px;color:var(--ink-3);flex:none;overflow:hidden}
-.sponsor .logo img{width:100%;height:100%;object-fit:cover}
+.sponsor .logo,#logoPrevia{width:64px;height:64px;border-radius:12px;background:#F2F2F2;border:1px dashed #E0E0E0;display:grid;place-items:center;font-size:11px;color:var(--ink-3);flex:none;overflow:hidden}
+.sponsor .logo img,#logoPrevia img{width:100%;height:100%;object-fit:cover}
 .sponsor .who b{font-size:18px;letter-spacing:-.02em;margin:2px 0}
 .sponsor .who span{font-size:13px;color:var(--ink-2)}
 .sponsor .who small{font-size:12px;color:var(--ink-2)}
@@ -2598,7 +2598,13 @@ function renderAjustes(){
         <label class="field"><span>Nome</span><input class="input" name="nome" value="${esc(p.nome || "")}" placeholder="Sua marca aqui"></label>
         <label class="field"><span>Descrição</span><input class="input" name="texto" value="${esc(p.texto || "")}" placeholder="Desconto exclusivo na pelada"></label>
         <label class="field"><span>Link do botão “Ver”</span><input class="input" name="url" type="url" value="${esc(p.url || "")}" placeholder="https://"></label>
-        <label class="field"><span>Link da logo</span><input class="input" name="logo" type="url" value="${esc(p.logo || "")}" placeholder="https://…/logo.png"></label>
+        <div class="field"><span>Logo</span>
+          <div style="display:flex;gap:14px;align-items:center">
+            <div class="logo" id="logoPrevia">${urlSegura(p.logo) ? `<img src="${esc(p.logo)}" alt="">` : "LOGO"}</div>
+            <label class="btn sm ghost" style="cursor:pointer">Enviar logo<input type="file" accept="image/png,image/jpeg,image/webp" data-change="logoArquivo" hidden></label>
+          </div>
+        </div>
+        <label class="field"><span>Ou cole o link da logo</span><input class="input" name="logo" type="url" value="${esc(p.logo || "")}" placeholder="https://…/logo.png"></label>
         <button class="btn block">Salvar patrocinador</button>
       </form>
     </section>
@@ -2881,7 +2887,30 @@ const MUDANCAS = {
     aviso(`Formação ${el.value}`);
   }),
   cartDia: el => run(async () => { await salvarPelada({ cartola_dia: Number(el.value) }); route(true); }),
-  cartHora: el => run(async () => { await salvarPelada({ cartola_hora: Number(el.value) }); route(true); })
+  cartHora: el => run(async () => { await salvarPelada({ cartola_hora: Number(el.value) }); route(true); }),
+  // logo do patrocinador: diminui pra no máximo 400px, sobe pro Storage e já salva no box
+  logoArquivo: el => run(async () => {
+    const arq = el.files[0];
+    el.value = "";
+    if (!arq) return;
+    aviso("Enviando logo…");
+    const img = await createImageBitmap(arq);
+    const k = Math.min(1, 400 / Math.max(img.width, img.height));
+    const c = Object.assign(document.createElement("canvas"), { width: Math.round(img.width * k), height: Math.round(img.height * k) });
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    const blob = await new Promise(r => c.toBlob(r, "image/webp", .9));
+    const caminho = `logo-${Date.now()}.webp`;
+    ok(await sb.storage.from("patrocinio").upload(caminho, blob, { contentType: "image/webp" }));
+    const logo = sb.storage.from("patrocinio").getPublicUrl(caminho).data.publicUrl;
+    const patrocinio = { ...app.patrocinio, logo };
+    ok(await sb.from("config").update({ patrocinio }).eq("id", 1));
+    app.patrocinio = patrocinio;
+    const campo = document.querySelector('[data-form="patrocinio"] [name="logo"]');
+    if (campo) campo.value = logo;
+    document.getElementById("logoPrevia").innerHTML = `<img src="${esc(logo)}" alt="">`;
+    document.querySelectorAll(".sponsor .logo").forEach(x => x.innerHTML = `<img src="${esc(logo)}" alt="">`);
+    aviso("Logo salva");
+  })
 };
 
 const INPUTS = {
