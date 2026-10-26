@@ -635,7 +635,7 @@ async function carregarLista(){
   if (!app.jogo) return;
   const [lista, conf, timesJogo, confrontos] = (await Promise.all([
     sb.rpc("lista_do_jogo", { p, d: app.jogo.data }),
-    sb.from("confirmacoes").select("jogador_id, vou, criado_em").eq("pelada_id", p).eq("data", app.jogo.data),
+    sb.from("confirmacoes").select("jogador_id, vou, criado_em, liberado").eq("pelada_id", p).eq("data", app.jogo.data),
     sb.from("times_do_jogo").select("jogador_id, time").eq("pelada_id", p).eq("data", app.jogo.data),
     sb.from("confrontos").select("*").eq("pelada_id", p).eq("data", app.jogo.data).order("criado_em")
   ])).map(ok);
@@ -1821,12 +1821,28 @@ function textoPrazo(){
 }
 function linhaLista(id, i, espera){
   const m = membroDe(id);
+  const pres = souPresidente(), subiu = !espera && !!(confDe(id) || {}).liberado;
   return `<li>
     <span class="num${espera ? "" : " lime"}">${i + 1}</span>
     ${avatarDe(id)}
-    <div class="who"><b>${esc(nomeDe(id))}${id === app.user.id ? " · você" : ""}</b><span>${m ? cap(m.tipo) : ""}</span></div>
+    <div class="who"><b>${esc(nomeDe(id))}${id === app.user.id ? " · você" : ""}</b><span>${m ? cap(m.tipo) : ""}${subiu ? " · subiu pelo presidente" : ""}</span></div>
     ${!espera && id !== app.user.id && situacaoDe(app.user.id) === "confirmado" ? `<span class="pill ${notaMinha(id) ? "soft" : "off"}">${notaMinha(id) ? `Pote ${7 - notaMinha(id)}` : "Falta votar"}</span>` : ""}
+    ${pres && espera ? `<button class="btn sm" data-act="subirEspera" data-jogador="${id}" data-sobe="1">Subir</button>` : ""}
+    ${pres && subiu ? `<button class="btn ghost sm" data-act="subirEspera" data-jogador="${id}" data-sobe="0">Tirar</button>` : ""}
   </li>`;
+}
+// presidente: põe na lista quem está fora (não respondeu ou disse "não vou"), inclusive ele mesmo
+function porNaListaHtml(){
+  const fora = app.membros.filter(m => situacaoDe(m.jogador_id) === "fora")
+    .sort((a, b) => (b.jogador_id === app.user.id) - (a.jogador_id === app.user.id) || nomeDe(a.jogador_id).localeCompare(nomeDe(b.jogador_id), "pt-BR"));
+  if (!fora.length) return "";
+  return `<div class="lista-sub">Pôr na lista <span>quem está fora entra como confirmado</span></div>
+    <div class="row" style="flex-wrap:nowrap">
+      <select class="input" id="porNaLista" aria-label="Jogador">
+        ${fora.map(m => `<option value="${m.jogador_id}">${esc(nomeDe(m.jogador_id))}${m.jogador_id === app.user.id ? " (você)" : ""}${confDe(m.jogador_id) ? " · disse não vou" : ""}</option>`).join("")}
+      </select>
+      <button class="btn sm" data-act="porNaLista">Pôr na lista</button>
+    </div>`;
 }
 function cardLista(){
   const j = app.jogo, s = listaStatus(), eu = app.user.id;
@@ -1864,9 +1880,10 @@ function cardLista(){
       ${meu}
       ${s !== "antes" ? `
         ${lista.length ? `<ul class="list" style="margin-top:6px">${lista.map((id, i) => linhaLista(id, i)).join("")}</ul>` : `<div class="empty">Ninguém confirmou ainda.</div>`}
-        ${espera.length ? `<div class="lista-sub">Lista de espera <span>sobem se sobrar vaga</span></div>
+        ${espera.length ? `<div class="lista-sub">Lista de espera <span>${souPresidente() ? "sobem se sobrar vaga ou se você subir" : "sobem se sobrar vaga"}</span></div>
           <ul class="list">${espera.map((id, i) => linhaLista(id, i, true)).join("")}</ul>` : ""}
-        ${s === "aberta" && semResposta ? `<p class="hint" style="margin-top:12px">${plural(semResposta, "mensalista ainda não respondeu", "mensalistas ainda não responderam")}. A vaga deles fica guardada até a lista fechar.</p>` : ""}` : ""}
+        ${s === "aberta" && semResposta ? `<p class="hint" style="margin-top:12px">${plural(semResposta, "mensalista ainda não respondeu", "mensalistas ainda não responderam")}. A vaga deles fica guardada até a lista fechar.</p>` : ""}
+        ${souPresidente() ? porNaListaHtml() : ""}` : ""}
     </section>`;
 }
 
@@ -2269,6 +2286,10 @@ function renderPeladaAdmin(){
     ${heroPelada()}
     ${subnavPelada("pelada")}
     ${cardLista()}
+    ${app.membro && !app.modoDev ? `<section class="card fade" style="animation-delay:.04s">
+      <div class="eyebrow">Cartola e sorteio</div><div class="h2">Sua posição</div>
+      ${seletorPosicao(true)}
+    </section>` : ""}
     ${cardPartidas()}
     ${cardCartolaAdmin()}
     ${app.pelada.cartola_ativo ? cardCartolaScouts() : ""}
@@ -2715,6 +2736,21 @@ const ACOES = {
     route(true);
   }),
   abrirConfirmar: () => { state.modal = "confirmar"; renderModal(); },
+  subirEspera: el => run(async () => {
+    const sobe = el.dataset.sobe === "1";
+    ok(await sb.rpc("presidente_subir", { p: app.pelada.id, jogador: el.dataset.jogador, sobe }));
+    await carregarLista();
+    route(true);
+    aviso(sobe ? `${nomeDe(el.dataset.jogador)} subiu e está confirmado` : `${nomeDe(el.dataset.jogador)} saiu da lista de confirmados`);
+  }),
+  porNaLista: () => run(async () => {
+    const id = (document.getElementById("porNaLista") || {}).value;
+    if (!id) return;
+    ok(await sb.rpc("presidente_subir", { p: app.pelada.id, jogador: id, sobe: true }));
+    await atualizarVotacao();
+    route(true);
+    aviso(`${id === app.user.id ? "Você está" : `${nomeDe(id)} está`} na lista`);
+  }),
   abrirVotacao: () => {
     const outros = naLista().filter(id => id !== app.user.id);
     state.votarIds = [...outros.filter(id => !notaMinha(id)), ...outros.filter(id => notaMinha(id))];
