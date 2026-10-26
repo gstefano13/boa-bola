@@ -1032,12 +1032,15 @@ function renderRanking(limite, fonte, titulo){
 }
 
 /* ===================== CARTOLA DA PELADA (Slides 08 a 11) =====================
-   Cada jogador monta um time de 7 com C$ 100. Compras, vendas e capitão passam
+   Cada jogador monta um time de 6 (sem goleiro) com C$ 60. Compras, vendas e capitão passam
    por funções do banco, que conferem saldo, vagas e se o mercado está aberto. */
 const POSICOES = ["GOL", "ZAG", "MEI", "ATA"];
-// formações: sempre 1 goleiro + ZAG-MEI-ATA
+// formações: só linha (ZAG-MEI-ATA). Goleiro não entra no Cartola: na pelada ele não é fixo
+const POSICOES_CARTOLA = ["ZAG", "MEI", "ATA"];
+const TAM_TIME = 6;
 const ESQUEMAS = [["2-2-2", "Equilibrado"], ["3-2-1", "Defensivo"], ["2-1-3", "Ofensivo"]];
-const vagasDe = esquema => { const [z, m, a] = (esquema || "2-2-2").split("-").map(Number); return { GOL: 1, ZAG: z, MEI: m, ATA: a }; };
+const vagasDe = esquema => { const [z, m, a] = (esquema || "2-2-2").split("-").map(Number); return { GOL: 0, ZAG: z, MEI: m, ATA: a }; };
+const noMercado = m => m.posicao && m.posicao !== "GOL";
 const esquemaAtual = () => (cart().meuTime || {}).esquema || "2-2-2";
 
 /* ---------- Escudo do time (desenhado na hora, a partir de forma, padrão, cores e sigla) ---------- */
@@ -1076,7 +1079,7 @@ const DIAS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sáb
 const DIAS_CURTOS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const CAPITAO = 1.5;
 const GRUPOS_SCOUT = [["Ataque", ["G", "A", "FT", "FD", "FF", "FS"]], ["Defesa e goleiro", ["DS", "SG", "DE", "DP", "V"]], ["Negativos", ["GC", "GS", "PP", "FC", "CA", "CV"]]];
-const SCOUTS_SIMPLES = ["G", "A", "V", "DE", "SG", "GC", "CA", "CV"];   // o básico que todo organizador consegue anotar
+const SCOUTS_SIMPLES = ["G", "A", "V", "SG", "GC", "CA", "CV"];   // o básico que todo organizador consegue anotar
 // scouts com a configuração da pelada: ligado/desligado e pontos trocados pelo presidente
 const scoutsDaPelada = () => {
   const off = app.pelada.cartola_scouts_off || [], troca = app.pelada.cartola_pontos || {};
@@ -1160,7 +1163,7 @@ function liga(){
 const minhaPosicaoLiga = () => { const i = liga().findIndex(t => t.jogador_id === app.user.id); return i < 0 ? null : i + 1; };
 function faltamNoTime(escalados){
   const vagas = vagasDe(esquemaAtual());
-  const faltas = POSICOES.map(p => [p, vagas[p] - escalados.filter(e => e.posicao === p).length]).filter(([, n]) => n > 0);
+  const faltas = POSICOES_CARTOLA.map(p => [p, vagas[p] - escalados.filter(e => e.posicao === p).length]).filter(([, n]) => n > 0);
   if (!faltas.length) return "Time completo";
   const partes = faltas.map(([p, n]) => `${n} ${NOME_POS[p][n > 1 ? 1 : 0]}`);
   const total = faltas.reduce((s, [, n]) => s + n, 0);
@@ -1189,13 +1192,13 @@ function renderCartolaGeral(){
   const r = rodadaAberta();
   const tabela = liga();
   const escalaram = r ? new Set(cart().escalacoes.filter(e => e.rodada_id === r.id).map(e => e.jogador_id)) : new Set();
-  const atletas = app.membros.filter(m => m.posicao).length;
+  const atletas = app.membros.filter(noMercado).length;
   view.innerHTML = `
     ${heroCartola({
       status: statusRodada(), titulo: "Cartola da pelada", sub: textoMercado(), rotulo: "Times na liga",
       numero: tabela.length, pill: r ? plural(escalaram.size, "time escalado", "times escalados") : "Nenhuma rodada aberta", pillLime: !!r,
       meta: "Visão do organizador: todos os times",
-      stats: [[encerradas().length, "Rodadas jogadas"], [atletas, "No mercado"], [app.membros.length - atletas, "Sem posição"]]
+      stats: [[encerradas().length, "Rodadas jogadas"], [atletas, "No mercado"], [app.membros.filter(m => !m.posicao).length, "Sem posição"]]
     })}
     ${subnavCartola("cartola")}
     ${souPresidente() ? cardCartolaAdmin() + cardCartolaScouts() : ""}
@@ -1209,7 +1212,7 @@ function renderCartolaGeral(){
           <li class="${i < 3 ? "top" : ""}">
             <span class="pos">${i + 1}</span>
             ${escudoSvg(x.escudo || escudoPadrao(x.nome), 34)}
-            <div class="who"><b>${esc(x.nome)}</b><span>${esc(nomeDe(x.jogador_id))} · ${x.esquema} · ${escalados.length}/7 escalados · patrimônio C$ ${cs(valor)}</span></div>
+            <div class="who"><b>${esc(x.nome)}</b><span>${esc(nomeDe(x.jogador_id))} · ${x.esquema} · ${escalados.length}/${TAM_TIME} escalados · patrimônio C$ ${cs(valor)}</span></div>
             <span class="val">${pts(x.total)}</span>
           </li>`;
         }).join("")}
@@ -1324,7 +1327,7 @@ function renderCartola(){
       <a class="slot" href="#mercado" data-act="cartVaga" data-pos="${pos_}">
         <span class="bola vazia">+</span><b class="vazio">Escalar</b><small></small>
       </a>`;
-  const linhas = ["ATA", "MEI", "ZAG", "GOL"].map(p => {
+  const linhas = ["ATA", "MEI", "ZAG"].map(p => {
     const doPos = escalados.filter(e => e.posicao === p);
     return `<div class="linha-campo"><span>${p}</span><div class="vagas">${Array.from({ length: vagasDe(t.esquema)[p] }, (_, i) => vaga(p, doPos[i])).join("")}</div></div>`;
   }).join("");
@@ -1358,7 +1361,7 @@ function renderCartola(){
       <div class="resumo">
         <div><b>C$ ${cs(custo)}</b><span>Custo do time</span></div>
         <div><b>C$ ${cs(saldo)}</b><span>Saldo</span></div>
-        <div><b>${escalados.length}/7</b><span>Escalados</span></div>
+        <div><b>${escalados.length}/${TAM_TIME}</b><span>Escalados</span></div>
       </div>
       <div class="dois">
         <a class="btn ghost" href="#mercado">Ver mercado</a>
@@ -1374,13 +1377,13 @@ function renderMercado(){
   const escalados = meuEscalado();
   const custo = escalados.reduce((s, e) => s + precoDe(e.atleta_id), 0);
   const saldo = t ? Number(t.saldo) : 0;
-  const atletas = app.membros.filter(m => m.posicao);
-  const semPosicao = app.membros.length - atletas.length;
+  const atletas = app.membros.filter(noMercado);
+  const semPosicao = app.membros.filter(m => !m.posicao).length;
   const precos = atletas.map(m => Number(m.preco));
   view.innerHTML = `
     ${t ? heroCartola({
       status: statusRodada(), titulo: "Mercado", sub: textoMercado(), rotulo: "Saldo (C$)",
-      numero: cs(saldo), pill: `${escalados.length} de 7 escalados`, meta: faltamNoTime(escalados),
+      numero: cs(saldo), pill: `${escalados.length} de ${TAM_TIME} escalados`, meta: faltamNoTime(escalados),
       stats: [[pts(custo), "Custo do time"], [pts(saldo + custo), "Patrimônio"], [atletas.length, "Jogadores"]]
     }) : heroCartola({
       status: statusRodada(), titulo: "Mercado", sub: textoMercado(), rotulo: "Jogadores no mercado",
@@ -1399,7 +1402,7 @@ function renderMercado(){
       </div>
       <label class="search">${LUPA}<input class="input" placeholder="Buscar jogador" value="${esc(state.mercBusca)}" data-input="mercBusca" aria-label="Buscar jogador"></label>
       <div class="seg" style="margin-top:12px">
-        ${[["todos", "Todos"], ...POSICOES.map(p => [p, p])].map(([k, v]) => `<button class="${state.mercPos === k ? "on" : ""}" data-act="mercPos" data-valor="${k}">${v}</button>`).join("")}
+        ${[["todos", "Todos"], ...POSICOES_CARTOLA.map(p => [p, p])].map(([k, v]) => `<button class="${state.mercPos === k ? "on" : ""}" data-act="mercPos" data-valor="${k}">${v}</button>`).join("")}
       </div>
       <div id="listaMerc"></div>
       ${semPosicao ? `<p class="hint">${plural(semPosicao, "jogador ainda não tem", "jogadores ainda não têm")} posição e não aparece${semPosicao > 1 ? "m" : ""} no mercado. O presidente define em Pelada → Elenco → Editar.</p>` : ""}
@@ -1415,7 +1418,7 @@ function renderListaMerc(){
   const escalados = meuEscalado();
   const busca = state.mercBusca.trim().toLowerCase();
   const ordem = { media: (a, b) => b.media - a.media, ultima: (a, b) => b.ultima - a.ultima, caro: (a, b) => b.preco - a.preco, barato: (a, b) => a.preco - b.preco }[state.mercOrdem];
-  const todos = app.membros.filter(m => m.posicao)
+  const todos = app.membros.filter(noMercado)
     .filter(m => situacaoDe(m.jogador_id) === "confirmado" || escalados.some(e => e.atleta_id === m.jogador_id))
     .filter(m => state.mercPos === "todos" || m.posicao === state.mercPos)
     .filter(m => !busca || `${m.jogadores.nome} ${m.jogadores.apelido || ""}`.toLowerCase().includes(busca))
@@ -1546,7 +1549,7 @@ function renderPontuacaoGeral(enc){
 
 /* ---------- Regras e scouts (Slide 11) ---------- */
 const FAQ_CARTOLA = [
-  ["O que são cartoletas (C$)?", "É a moeda do jogo. Você começa com C$ 100 e usa para comprar jogadores."],
+  ["O que são cartoletas (C$)?", "É a moeda do jogo. Você começa com C$ 60 e usa para comprar jogadores."],
   ["Como ganho mais cartoletas?", "Quando os jogadores do seu time valorizam, o seu patrimônio cresce. Ao vender um jogador, você recebe o preço atual dele."],
   ["Quando o preço do jogador muda?", "Quando o organizador encerra a rodada. Quem faz mais de 5 pontos valoriza, quem faz menos desvaloriza, até C$ 3 por rodada. Quem não jogou mantém o preço."],
   ["E se um escalado faltar à pelada?", "Ele marca 0 ponto na rodada e o preço dele não muda. Troque antes do mercado fechar."],
@@ -1557,12 +1560,12 @@ function renderRegras(){
   const regras = scoutsDaPelada().filter(r => r.ativo);
   const grupo = codigos => codigos.map(c => regras.find(r => r.codigo === c)).filter(Boolean);
   const card = (eyebrow, titulo, codigos) => { const itens = grupo(codigos); return itens.length ? `<section class="card fade"><div class="eyebrow">${eyebrow}</div><div class="h2">${titulo}</div>${lista(itens)}</section>` : ""; };
-  const sub = r => r.posicoes ? (r.posicoes.length > 1 ? "Goleiro e zagueiros" : "Goleiro") : ["G", "A", "DS", "V"].includes(r.codigo) ? "Todas as posições" : "";
+  const sub = r => r.codigo === "SG" ? "Zagueiros: 1 por jogo que o time vencer sem sofrer gol" : r.posicoes ? (r.posicoes.length > 1 ? "Goleiro e zagueiros" : "Goleiro") : ["G", "A", "DS", "V"].includes(r.codigo) ? "Todas as posições" : "";
   const lista = itens => `<ul class="list" style="margin-top:8px">${itens.map(r => `
     <li><span class="cod">${r.codigo}</span><div class="who"><b>${esc(r.nome)}</b>${sub(r) ? `<span>${sub(r)}</span>` : ""}</div>
       <span class="${r.pontos < 0 ? "val-neg" : "val-pos"}">${sinal(Number(r.pontos))}</span></li>`).join("")}</ul>`;
   const passos = [
-    ["Escale 7 jogadores", "1 goleiro e 6 na linha, numa das 3 formações: 2-2-2 (equilibrado), 3-2-1 (defensivo) ou 2-1-3 (ofensivo). Tudo dentro do seu saldo de cartoletas."],
+    ["Escale 6 jogadores", "Só jogadores de linha (goleiro não entra, porque na pelada ele não é fixo), numa das 3 formações: 2-2-2 (equilibrado), 3-2-1 (defensivo) ou 2-1-3 (ofensivo). Tudo dentro do seu saldo de cartoletas."],
     ["Escolha o capitão", "A pontuação dele vale 1,5×. Dá pra trocar até o mercado fechar."],
     ["Mercado só no dia da pelada", "Abre à 0h do dia do jogo e fecha quando a pelada começa. Só dá pra escalar quem confirmou presença."],
     ["Pontos depois do jogo", "Os pontos só contam quando o presidente sobe as estatísticas: gols, assistências, defesas e cartões."],
@@ -1571,8 +1574,8 @@ function renderRegras(){
   view.innerHTML = `
     ${heroCartola({
       status: "Cartola da pelada", titulo: "Regras e scouts", sub: "Como funciona a pontuação e as cartoletas", rotulo: "Todo mundo começa com",
-      numero: "100", pill: "C$ cartoletas", meta: "Moeda do jogo",
-      stats: [["7", "Jogadores"], ["×1,5", "Capitão"], [app.jogo ? `${DIAS_CURTOS[new Date(app.jogo.inicio).getDay()]} 0h` : "–", "Mercado abre"]]
+      numero: "60", pill: "C$ cartoletas", meta: "Moeda do jogo",
+      stats: [[String(TAM_TIME), "Jogadores"], ["×1,5", "Capitão"], [app.jogo ? `${DIAS_CURTOS[new Date(app.jogo.inicio).getDay()]} 0h` : "–", "Mercado abre"]]
     })}
     ${subnavCartola("regras")}
     <section class="card fade" style="animation-delay:.05s">
@@ -1582,7 +1585,7 @@ function renderRegras(){
           <div class="who"><b style="white-space:normal">${t}</b><span style="font-size:13px;color:var(--ink-2)">${esc(d)}</span></div></li>`).join("")}</ul>
     </section>
     ${card("Pontos positivos", "Ataque", GRUPOS_SCOUT[0][1])}
-    ${card("Pontos positivos", "Defesa e goleiro", GRUPOS_SCOUT[1][1])}
+    ${card("Pontos positivos", "Defesa", GRUPOS_SCOUT[1][1])}
     ${card("Perde pontos", "Negativos", GRUPOS_SCOUT[2][1])}
     <section class="card fade">
       <div class="eyebrow">Dúvidas</div><div class="h2">Sobre as cartoletas</div>
@@ -1628,6 +1631,11 @@ function scoutsDaPartida(partidaId){
   const soma = (atleta, codigo, n) => { if (!atleta || !codigo || !ativos.has(codigo)) return; const k = atleta + "|" + codigo; conta.set(k, (conta.get(k) || 0) + n); };
   app.gols.filter(g => g.partida_id === partidaId).forEach(g => { soma(g.autor_id, "G", 1); soma(g.assistencia_id, "A", 1); });
   app.lances.filter(l => l.partida_id === partidaId).forEach(l => soma(l.jogador_id, scoutDaMetrica(l.metrica), l.qtd));
+  // Baliza zero: zagueiro do time que venceu sem sofrer gol (só dá pra prever na partida do dia, que tem os placares carregados)
+  const pa = app.partidas.find(p => p.id === partidaId);
+  if (pa && app.jogo && pa.data === app.jogo.data) app.confrontos.forEach(c => [[c.time_a, c.gols_a, c.gols_b], [c.time_b, c.gols_b, c.gols_a]]
+    .forEach(([time, feitos, sofridos]) => { if (feitos > 0 && sofridos === 0) app.timesJogo
+      .filter(t => t.time === time && (membroDe(t.jogador_id) || {}).posicao === "ZAG").forEach(t => soma(t.jogador_id, "SG", 1)); }));
   return [...conta].map(([k, qtd]) => { const [atleta, codigo] = k.split("|"); return { atleta, codigo, qtd }; });
 }
 
@@ -1635,7 +1643,7 @@ function scoutsDaPartida(partidaId){
 function cardCartolaScouts(){
   const todos = scoutsDaPelada();
   const ligados = todos.filter(s => s.ativo).length;
-  const onde = s => s.posicoes ? (s.posicoes.length > 1 ? "Goleiro e zagueiros" : "Só goleiro") : "Todas as posições";
+  const onde = s => s.codigo === "SG" ? "Zagueiros · sai sozinho dos placares da noite" : s.posicoes ? (s.posicoes.length > 1 ? "Goleiro e zagueiros" : "Só goleiro") : "Todas as posições";
   return `
     <section class="card fade" style="animation-delay:.06s">
       <div class="eyebrow">Cartola da pelada</div><div class="h2">Scouts que contam</div>
@@ -1887,7 +1895,7 @@ function passosGuia(){
         "Tudo é atualizado quando o presidente anota a partida." ]) },
     { ico: ico("estrela"), titulo: "Cartola da pelada",
       corpo: itens([
-        "Monte seu time com <b>C$ 100</b> de saldo, escalando jogadores da própria pelada.",
+        "Monte seu time com <b>C$ 60</b> de saldo, escalando jogadores da própria pelada.",
         "O <b>mercado abre no dia do jogo à meia-noite</b> e fecha na hora que a bola rola. Só dá pra escalar quem confirmou.",
         "Os pontos contam depois que o presidente sobe as estatísticas. Dispute a liga com a galera." ]) + `<p class="hint">Só aparece se a sua pelada tiver o Cartola ligado.</p>` },
     { ico: ico("agenda"), titulo: pres ? "Pelada · você é o presidente" : "Pelada",
