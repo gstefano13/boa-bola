@@ -299,6 +299,16 @@ button.pill{font:inherit;font-size:12.5px;font-weight:500;border:0;cursor:pointe
 .placar .x{font-family:var(--mono);color:var(--ink-3);font-size:22px}
 .placar .stepper{margin-top:4px}
 
+/* pós-pelada */
+.list li.escolha{flex-wrap:wrap;row-gap:10px}
+.list li.escolha .seg{flex:1 1 100%}
+.seg button .colete{width:10px;height:10px;margin-right:5px;vertical-align:-1px}
+.seg button.on .colete{border-color:#fff}
+.opt[data-act]{cursor:pointer}
+.elencos{display:grid;gap:8px;margin-top:10px}
+.elencos div{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;line-height:1.45}
+.elencos .colete{margin-top:3px}
+
 /* lista de confirmação e popups */
 .prazo{display:flex;gap:10px;align-items:flex-start;background:var(--lime-tint);border:1px solid #E2F4BE;border-radius:var(--r-md);padding:12px 14px;margin-top:14px;font-size:13px;line-height:1.4}
 .prazo svg{width:18px;height:18px;flex:none;margin-top:1px}
@@ -383,7 +393,7 @@ const state = { periodo: "mes", stat: "gols", login: "codigo", loginEmail: "", l
   busca: "", filtro: "todas", verTodas: false, novaPelada: false, buscaUsu: "",
   buscaJog: "", filtroJog: "todos", verTodosJog: false, editando: null, addJogador: false, editMetrica: null,
   mercPos: "todos", mercBusca: "", mercOrdem: "media", mercTodos: false, pontRodada: null, faq: 0, renomear: false,
-  capitao: null, capitaoRodada: undefined, confirmEncerrar: false, editScout: null, ajustesAbertos: false, editarTime: false, formTime: null, modal: null, modalVisto: false, votosVistos: new Set(), guiaPasso: 0, votarIds: [], troca: null };
+  capitao: null, capitaoRodada: undefined, confirmEncerrar: false, editScout: null, ajustesAbertos: false, editarTime: false, formTime: null, modal: null, modalVisto: false, pos: null, novaData: null, votosVistos: new Set(), guiaPasso: 0, votarIds: [], troca: null };
 
 /* ===================== REGRAS ===================== */
 const CHUTEIRAS = [
@@ -613,7 +623,7 @@ async function carregar(){
     sb.from("peladas").select("*").eq("id", p).single(),
     sb.from("codigos_presidente").select("sufixo").eq("pelada_id", p),   // só dev e presidente recebem
     tudo(() => sb.from("membros").select("jogador_id, papel, tipo, pote_manual, entrou_em, posicao, preco, jogadores(nome, apelido, foto_url, pendente)").eq("pelada_id", p)),
-    tudo(() => sb.from("partidas").select("id, data").eq("pelada_id", p).order("data")),
+    tudo(() => sb.from("partidas").select("id, data, modo").eq("pelada_id", p).order("data")),
     tudo(() => sb.from("gols").select("id, partida_id, autor_id, assistencia_id").eq("pelada_id", p).order("criado_em").order("id")),
     tudo(() => sb.from("presencas").select("partida_id, jogador_id").eq("pelada_id", p).order("partida_id").order("jogador_id")),
     tudo(() => sb.from("lances").select("id, partida_id, jogador_id, metrica, qtd").eq("pelada_id", p).order("id")),
@@ -652,7 +662,7 @@ async function carregarLista(){
 async function atualizarVotacao(){
   const p = app.pelada.id;
   const [partidas, meusVotos] = (await Promise.all([
-    tudo(() => sb.from("partidas").select("id, data").eq("pelada_id", p).order("data")),
+    tudo(() => sb.from("partidas").select("id, data, modo").eq("pelada_id", p).order("data")),
     tudo(() => sb.from("votos").select("partida_id, votado_id, nota").eq("pelada_id", p).eq("votante_id", app.user.id).order("id"))
   ])).map(ok);
   Object.assign(app, { partidas, meusVotos });
@@ -712,22 +722,23 @@ function route(manterScroll){
   if (!app.user) renderLogin();
   else if (app.modoDev) {
     const views = { peladas: renderPeladasDev, pelada: app.pelada ? renderPelada : renderPeladasDev, usuarios: renderUsuarios, rankings: renderRankingsDev, ajustes: renderAjustes };
-    if (app.pelada) views.times = renderTimes;
+    if (app.pelada) Object.assign(views, { times: renderTimes, pospelada: renderPosPelada });
     // dev vê o Cartola da pelada aberta em modo organizador (sem time próprio)
     if (app.pelada) Object.assign(views, { cartola: renderCartola, mercado: renderMercado, liga: renderLiga, pontuacao: renderPontuacao, regras: renderRegras });
     v = views[location.hash.slice(1)] ? location.hash.slice(1) : "peladas";
     itens = NAV_DEV;
     views[v]();
-    if (["pelada", "times", "cartola", "mercado", "liga", "pontuacao", "regras"].includes(v)) v = "peladas";
+    if (["pelada", "times", "pospelada", "cartola", "mercado", "liga", "pontuacao", "regras"].includes(v)) v = "peladas";
   } else if (!app.pelada) renderEscolher();
   else {
     const views = { inicio: renderInicio, jogadores: renderJogadores, rankings: renderRankings, pelada: renderPelada, times: renderTimes };
+    if (souPresidente()) views.pospelada = renderPosPelada;
     if (app.pelada.cartola_ativo) Object.assign(views, { cartola: renderCartola, mercado: renderMercado, liga: renderLiga, pontuacao: renderPontuacao, regras: renderRegras });
     v = views[location.hash.slice(1)] ? location.hash.slice(1) : "inicio";
     itens = navJogador();
     views[v]();
     if (["mercado", "liga", "pontuacao", "regras"].includes(v)) v = "cartola";
-    if (v === "times") v = "pelada";
+    if (v === "times" || v === "pospelada") v = "pelada";
   }
   const nav = document.getElementById("nav");
   nav.classList.toggle("cinco", itens.length > 4);
@@ -2024,6 +2035,10 @@ function renderModal(){
   const el = document.getElementById("modal");
   const t = state.modal, j = app.jogo;
   if (t === "guia") { el.innerHTML = `<div class="sheet" data-act="nada" role="dialog" aria-modal="true" aria-label="Como funciona o Anotou">${corpoGuia()}</div>`; return; }
+  if (t === "modoPartida" || t === "resumoPos") {
+    el.innerHTML = `<div class="sheet" data-act="nada" role="dialog" aria-modal="true">${t === "modoPartida" ? corpoModoPartida() : corpoResumoPos()}</div>`;
+    return;
+  }
   if (!t || !j || !app.pelada) { el.innerHTML = ""; return; }
   const fechar = `<button class="x" data-act="fecharModal" aria-label="Fechar">×</button>`;
   const prazo = `<div class="prazo">${RELOGIO}<div>${textoPrazo()}</div></div>`;
@@ -2428,19 +2443,32 @@ function cardPartidas(){
   const lancesDaPartida = app.lances.filter(l => l.partida_id === state.partida);
   const candidatos = presentes.size ? [...presentes] : app.membros.map(m => m.jogador_id);
   const opcoes = ids => ids.map(id => `<option value="${id}">${esc(nomeDe(id))}</option>`).join("");
+  const sel = partidas.find(x => x.id === state.partida);
+  const rascunho = rascunhoPos();
   return `
     <section class="card fade" style="animation-delay:.03s">
       <div class="eyebrow">Toda semana</div><div class="h2">Partidas</div>
       <form data-form="novaPartida" class="row" style="margin-top:14px">
-        <input class="input" type="date" name="data" value="${hoje()}" required>
+        <input class="input" type="date" name="data" value="${hoje()}" max="${hoje()}" required>
         <button class="btn">Nova partida</button>
       </form>
+      ${rascunho ? `<div class="box row" style="justify-content:space-between">
+        <div class="who"><b>Pós-pelada de ${dataCurta(rascunho.data)} sem salvar</b><span>${plural(rascunho.jogos.length, "jogo lançado", "jogos lançados")}</span></div>
+        <div class="row"><button class="btn ghost sm" data-act="posDescartar">Descartar</button><button class="btn sm" data-act="posContinuar">Continuar</button></div>
+      </div>` : ""}
       ${partidas.length ? `
         <label class="field"><span>Partida</span>
           <select class="input" data-change="selPartida">
-            ${partidas.map(x => `<option value="${x.id}" ${x.id===state.partida?"selected":""}>${dataLonga(x.data)}</option>`).join("")}
+            ${partidas.map(x => `<option value="${x.id}" ${x.id===state.partida?"selected":""}>${dataLonga(x.data)}${x.modo === "pos_pelada" ? " · pós-pelada" : ""}</option>`).join("")}
           </select>
         </label>
+        ${sel.modo === "pos_pelada" ? `
+        <div class="box">
+          <b style="font-size:14px;font-weight:500">Lançada no pós-pelada</b>
+          <p class="note" style="margin-top:4px">${plural(presentes.size, "jogador", "jogadores")} · ${plural(golsDaPartida.length, "gol", "gols")} · ${plural(lancesDaPartida.filter(l => l.metrica !== "vitorias").reduce((s, l) => s + l.qtd, 0), "estatística", "estatísticas")}</p>
+          <p class="hint">Errou alguma coisa? Corrija os times, os jogos ou as estatísticas. Os rankings e a rodada do Cartola dessa partida são recalculados.</p>
+          <button class="btn block" data-act="posCorrigir" data-data="${sel.data}" style="margin-top:12px">Corrigir partida</button>
+        </div>` : `
         <div class="sub-title">Quem jogou (${presentes.size})</div>
         <ul class="list">
           ${app.membros.map(m => `
@@ -2479,9 +2507,272 @@ function cardPartidas(){
                 <div class="who"><b>${esc(nomeDe(l.jogador_id))}</b><span>${esc(nomeLance(l.metrica))} × ${l.qtd}</span></div>
                 <button class="btn ghost sm" data-act="apagarLance" data-id="${l.id}" data-qtd="${l.qtd}">−1</button>
               </li>`).join("")}
-          </ul>` : ""}` : ""}
+          </ul>` : ""}` : ""}`}
       ` : `<p class="note">Crie a primeira partida pra marcar presença e lançar os gols.</p>`}
     </section>`;
+}
+
+/* ===================== PÓS-PELADA =====================
+   O presidente lança a pelada depois que ela acabou: separa os 4 times, diz quem jogou
+   contra quem e anota o que aconteceu em cada jogo. O rascunho fica no aparelho até salvar;
+   o banco grava tudo de uma vez (salvar_pos_pelada) e encerra ou recalcula a rodada do Cartola. */
+const POS_TIMES = [1, 2, 3, 4];
+const rascunhoPos = () => { try { return JSON.parse(ler("pos." + app.pelada.id) || "null"); } catch { return null; } };
+const guardarPos = () => gravar("pos." + app.pelada.id, state.pos ? JSON.stringify(state.pos) : null);
+const timeDe = id => state.pos.times[id] || 0;
+const elencoPos = n => Object.keys(state.pos.times).filter(id => state.pos.times[id] === n).sort((a, b) => nomeDe(a).localeCompare(nomeDe(b), "pt-BR"));
+const jogoAberto = () => state.pos.jogos[state.pos.aberto];
+const metricaLigada = chave => app.pelada.metricas.some(m => m.chave === chave && m.ativo);
+const scoutLigado = cod => app.pelada.cartola_ativo && !(app.pelada.cartola_scouts_off || []).includes(cod);
+const posAssist = () => metricaLigada("assistencias") || scoutLigado("A");
+const posVitoria = () => metricaLigada("vitorias") || scoutLigado("V");
+// o que ele anota jogo a jogo: só as estatísticas ligadas na pelada (vitória e baliza zero saem do placar)
+const posStats = () => opcoesLance().filter(([v]) => v !== "vitorias" && v !== "SG");
+const nomeStat = k => k === "G" ? "⚽" : k === "A" ? "🎯" : k === "V" ? "Vitória" : nomeLance(k);
+
+// placar sai dos gols: gol de quem é do time + gol contra do adversário
+function placarPos(j){
+  let a = 0, b = 0;
+  j.gols.forEach(g => { if (timeDe(g.autor) === j.a) a++; else b++; });
+  j.lances.filter(l => l.metrica === "gol_contra").forEach(l => { if (timeDe(l.jogador) === j.a) b += l.qtd; else a += l.qtd; });
+  return [a, b];
+}
+
+function totaisPos(){
+  const t = new Map();
+  const soma = (id, k, n) => { if (!t.has(id)) t.set(id, {}); const o = t.get(id); o[k] = (o[k] || 0) + n; };
+  state.pos.jogos.forEach(j => {
+    j.gols.forEach(g => { soma(g.autor, "G", 1); if (g.assist) soma(g.assist, "A", 1); });
+    j.lances.forEach(l => soma(l.jogador, l.metrica, l.qtd));
+    const [a, b] = placarPos(j);
+    if (posVitoria() && a !== b) elencoPos(a > b ? j.a : j.b).forEach(id => soma(id, "V", 1));
+  });
+  return t;
+}
+
+// times mudaram depois dos jogos lançados: sai o que ficou com jogador fora dos dois times do jogo
+function podarJogos(){
+  let fora = 0;
+  state.pos.jogos.forEach(j => {
+    const em = id => [j.a, j.b].includes(timeDe(id));
+    const gols = j.gols.filter(g => em(g.autor));
+    gols.forEach(g => { if (g.assist && timeDe(g.assist) !== timeDe(g.autor)) { g.assist = null; fora++; } });
+    const lances = j.lances.filter(l => em(l.jogador));
+    fora += j.gols.length - gols.length + j.lances.length - lances.length;
+    Object.assign(j, { gols, lances });
+  });
+  return fora;
+}
+
+// mesma regra do banco (salvar_pos_pelada): o que acontece com o Cartola ao salvar
+function previsaoCartola(){
+  const P = state.pos, pa = app.partidas.find(x => x.data === P.data);
+  if (!app.pelada.cartola_ativo) return "Os rankings são atualizados na hora. O Cartola está desligado nesta pelada.";
+  const encerradas = cart().rodadas.filter(r => r.status === "encerrada");
+  const usada = pa && encerradas.find(r => r.partida_id === pa.id);
+  if (usada) return `Os rankings são atualizados e a <b>rodada ${usada.numero}</b> do Cartola é recalculada com os números corrigidos${usada === encerradas[encerradas.length - 1]
+    ? ", inclusive os preços." : ". Os preços ficam como estão, porque já teve rodada depois dela."}`;
+  const r = rodadaAberta();
+  if (!r) return "Os rankings são atualizados na hora. Não tem rodada do Cartola aberta.";
+  if (new Date(r.fecha_em) > new Date()) return `Os rankings são atualizados na hora. O mercado da rodada ${r.numero} do Cartola ainda está aberto, então ela não é encerrada agora.`;
+  const fecha = new Date(r.fecha_em).toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
+  const desde = iso(new Date(new Date(fecha + "T12:00").getTime() - 6 * 864e5));
+  if ((r.partida_id && (!pa || r.partida_id !== pa.id)) || P.data < desde || P.data > hoje())
+    return `Os rankings são atualizados na hora. A rodada ${r.numero} do Cartola é de outra data e não é encerrada.`;
+  return `Ao salvar, a <b>rodada ${r.numero}</b> do Cartola é encerrada: pontos dos jogadores e dos times, preços e ranking da liga atualizados.`;
+}
+
+// abre o pós-pelada de uma data: continua o rascunho, corrige o que já foi salvo ou começa do zero
+async function abrirPos(data){
+  const salvo = rascunhoPos();
+  if (salvo && salvo.data === data) state.pos = salvo;
+  else {
+    const p = app.pelada.id, pa = app.partidas.find(x => x.data === data);
+    const [lista, times, confrontos, gols, lances] = (await Promise.all([
+      sb.rpc("lista_do_jogo", { p, d: data }),
+      sb.from("times_do_jogo").select("jogador_id, time").eq("pelada_id", p).eq("data", data),
+      sb.from("confrontos").select("id, time_a, time_b").eq("pelada_id", p).eq("data", data).order("criado_em"),
+      pa ? sb.from("gols").select("confronto_id, autor_id, assistencia_id").eq("partida_id", pa.id).order("criado_em").order("id") : { data: [] },
+      pa ? sb.from("lances").select("confronto_id, jogador_id, metrica, qtd").eq("partida_id", pa.id).order("id") : { data: [] }
+    ])).map(ok);
+    const corrigindo = !!pa && pa.modo === "pos_pelada";
+    state.pos = { data, corrigindo, passo: corrigindo ? "jogos" : "times", aberto: null, todos: false, extras: [], metrica: null,
+      substitui: !!pa && !corrigindo && [app.gols, app.lances, app.presencas].some(xs => xs.some(x => x.partida_id === pa.id)),
+      confirmados: lista.filter(l => l.situacao === "confirmado").map(l => l.jogador_id),
+      // aproveita o sorteio do dia, se teve
+      times: Object.fromEntries(times.filter(t => POS_TIMES.includes(t.time)).map(t => [t.jogador_id, t.time])),
+      jogos: corrigindo ? confrontos.map(c => ({ a: c.time_a, b: c.time_b,
+        gols: gols.filter(g => g.confronto_id === c.id && g.autor_id).map(g => ({ autor: g.autor_id, assist: g.assistencia_id })),
+        lances: lances.filter(l => l.confronto_id === c.id && l.metrica !== "vitorias").map(l => ({ jogador: l.jogador_id, metrica: l.metrica, qtd: l.qtd })) })) : [] };
+  }
+  guardarPos();
+  if (location.hash === "#pospelada") route(); else location.hash = "pospelada";
+}
+
+function renderPosPelada(){
+  view.className = "grid solo wide";
+  if (!state.pos) state.pos = rascunhoPos();
+  if (!state.pos || !souPresidente()) { history.replaceState(null, "", "#pelada"); return renderPelada(); }
+  const P = state.pos, noTimes = P.passo === "times";
+  view.innerHTML = `
+    <section class="card fade">
+      <div class="card-head" style="margin-bottom:0">
+        <div><div class="eyebrow">${P.corrigindo ? "Corrigir partida" : "Pós-pelada"} · ${dataLonga(P.data)}</div>
+          <div class="h2">${noTimes ? "Separe os 4 times" : "Computar estatísticas"}</div></div>
+        <a class="btn ghost sm" href="#pelada">Sair</a>
+      </div>
+      <div class="seg full" style="margin-top:14px">
+        <button class="${noTimes ? "on" : ""}" data-act="posPasso" data-passo="times">1 · Times</button>
+        <button class="${noTimes ? "" : "on"}" data-act="posPasso" data-passo="jogos">2 · Estatísticas</button>
+      </div>
+      <p class="note">${noTimes ? "Toque no colete de cada jogador que foi pra aquele time. Quem não jogou fica sem time."
+        : "Monte cada jogo da noite (quem jogou contra quem) e lance os gols e as estatísticas. Os elencos já vêm dos times que você separou."}
+        O rascunho fica salvo neste aparelho até você salvar.</p>
+      ${P.substitui ? `<p class="hint">Essa data já tem coisas lançadas ao vivo. Ao salvar, o pós-pelada substitui tudo.</p>` : ""}
+    </section>
+    ${noTimes ? posPassoTimes() : posPassoJogos()}`;
+}
+
+function posPassoTimes(){
+  const P = state.pos;
+  const base = P.todos ? app.membros.map(m => m.jogador_id) : [...P.confirmados, ...P.extras, ...Object.keys(P.times)];
+  const ids = [...new Set(base)].filter(membroDe).sort((a, b) => nomeDe(a).localeCompare(nomeDe(b), "pt-BR"));
+  const outros = app.membros.map(m => m.jogador_id).filter(id => !ids.includes(id)).sort((a, b) => nomeDe(a).localeCompare(nomeDe(b), "pt-BR"));
+  return `
+    <section class="card fade" style="animation-delay:.04s">
+      <div class="row">${POS_TIMES.map(n => `<span class="pill soft">${colete(n)}${nomeTime(n)} · ${elencoPos(n).length}</span>`).join("")}</div>
+      ${ids.length ? `<ul class="list" style="margin-top:8px">${ids.map(id => `
+        <li class="escolha">
+          ${avatarDe(id)}
+          <div class="who"><b>${esc(nomeDe(id))}${(membroDe(id) || {}).posicao ? `<span class="pos-tag">${membroDe(id).posicao}</span>` : ""}</b>
+            <span>${timeDe(id) ? `Time ${nomeTime(timeDe(id))}` : P.confirmados.includes(id) ? "Confirmado · sem time" : "Sem time"}</span></div>
+          <div class="seg full">${POS_TIMES.map(n => `<button class="${timeDe(id) === n ? "on" : ""}" data-act="posTime" data-id="${id}" data-time="${n}" aria-label="${esc(nomeDe(id))} no time ${nomeTime(n)}">${colete(n)}${nomeTime(n)}</button>`).join("")}</div>
+        </li>`).join("")}</ul>`
+      : `<div class="empty">Ninguém confirmou nessa data.<br>Adicione quem jogou ou mostre o elenco todo.</div>`}
+      ${outros.length ? `<div class="row" style="margin-top:14px">
+        <select class="input" id="posExtra" aria-label="Adicionar jogador"><option value="">Adicionar outro jogador</option>${outros.map(id => `<option value="${id}">${esc(nomeDe(id))}</option>`).join("")}</select>
+        <button class="btn ghost" data-act="posExtra">Adicionar</button>
+      </div>
+      ${P.todos ? "" : `<button class="lnk" data-act="posTodos" style="margin-top:12px;background:none">Mostrar o elenco todo</button>`}` : ""}
+      <button class="btn block" data-act="posCriarTimes">Criar times</button>
+    </section>`;
+}
+
+function posPassoJogos(){
+  const P = state.pos;
+  const jogos = n => P.jogos.filter(j => j.a === n || j.b === n).length;
+  const sugestao = [...POS_TIMES].sort((a, b) => jogos(a) - jogos(b) || a - b);
+  const opcoes = sel => POS_TIMES.map(n => `<option value="${n}" ${n === sel ? "selected" : ""}>${nomeTime(n)}</option>`).join("");
+  return `
+    <section class="card fade" style="animation-delay:.04s">
+      <div class="card-head" style="margin-bottom:0"><div><div class="eyebrow">Times</div><div class="h2">Quem jogou em cada um</div></div>
+        <button class="btn ghost sm" data-act="posPasso" data-passo="times">Editar</button></div>
+      <div class="elencos">${POS_TIMES.map(n => `<div>${colete(n)}<span><b>${nomeTime(n)}:</b> ${elencoPos(n).map(id => esc(nomeDe(id))).join(", ")}</span></div>`).join("")}</div>
+    </section>
+
+    <section class="card fade" style="animation-delay:.06s">
+      <div class="eyebrow">Jogos da noite</div><div class="h2">${P.jogos.length ? plural(P.jogos.length, "jogo lançado", "jogos lançados") : "Qual time jogou contra qual?"}</div>
+      ${P.jogos.length ? `<ul class="list" style="margin-top:8px">${P.jogos.map((j, i) => {
+        const [a, b] = placarPos(j), est = j.lances.reduce((s, l) => s + l.qtd, 0);
+        return `<li class="click ${P.aberto === i ? "sel" : ""}" data-act="posAbrir" data-i="${i}"><span class="num ${P.aberto === i ? "lime" : ""}">${i + 1}</span>
+          <div class="who"><b>${nomeTime(j.a)} ${a} x ${b} ${nomeTime(j.b)}</b><span>${plural(j.gols.length, "gol", "gols")}${est ? ` · ${plural(est, "estatística", "estatísticas")}` : ""}</span></div>
+          <span class="pill soft">${P.aberto === i ? "Aberto" : "Editar"}</span></li>`; }).join("")}</ul>` : ""}
+      <form data-form="posJogo" style="margin-top:14px">
+        <div class="two">
+          <label class="field" style="margin:0"><span>Time</span><select class="input" name="a">${opcoes(sugestao[0])}</select></label>
+          <label class="field" style="margin:0"><span>Contra</span><select class="input" name="b">${opcoes(sugestao[1])}</select></label>
+        </div>
+        <button class="btn ghost block" style="margin-top:12px">+ Adicionar jogo</button>
+      </form>
+    </section>
+
+    ${P.aberto != null && jogoAberto() ? cardJogoPos() : ""}
+
+    <section class="card fade" style="animation-delay:.1s">
+      <div class="eyebrow">Pronto?</div><div class="h2">Conferir e salvar</div>
+      <p class="note">Antes de salvar aparece um resumo com tudo pra você conferir.${posVitoria() ? " A vitória de cada jogador sai sozinha do placar." : ""}</p>
+      <button class="btn block" data-act="posConferir" ${P.jogos.length ? "" : "disabled"}>Conferir resumo</button>
+    </section>`;
+}
+
+function cardJogoPos(){
+  const P = state.pos, i = P.aberto, j = jogoAberto(), [a, b] = placarPos(j), stats = posStats();
+  const grupos = `${[j.a, j.b].map(n => `<optgroup label="${nomeTime(n)}">${elencoPos(n).map(id => `<option value="${id}">${esc(nomeDe(id))}</option>`).join("")}</optgroup>`).join("")}`;
+  const temGC = stats.some(([v]) => v === "gol_contra");
+  return `
+    <section class="card fade" id="jogoAberto">
+      <div class="card-head" style="margin-bottom:0">
+        <div><div class="eyebrow">Jogo ${i + 1}</div><div class="h2">${nomeTime(j.a)} x ${nomeTime(j.b)}</div></div>
+        <button class="btn ghost sm" data-act="posApagarJogo" data-i="${i}">Excluir jogo</button>
+      </div>
+      <div class="placar">
+        <div class="lado">${colete(j.a)}${nomeTime(j.a)}</div>
+        <div><span class="gols">${a}</span> <span class="x">x</span> <span class="gols">${b}</span></div>
+        <div class="lado">${colete(j.b)}${nomeTime(j.b)}</div>
+      </div>
+      <p class="hint" style="text-align:center">O placar sai dos gols lançados${temGC ? " (gol contra conta pro adversário)" : ""}.</p>
+
+      <div class="sub-title">Gols (${j.gols.length})</div>
+      <form data-form="posGol" class="row">
+        <select class="input" name="autor" required aria-label="Quem fez"><option value="">Quem fez</option>${grupos}</select>
+        ${posAssist() ? `<select class="input" name="assist" aria-label="Assistência"><option value="">Sem assistência</option>${grupos}</select>` : ""}
+        <button class="btn">+ Gol</button>
+      </form>
+      ${j.gols.length ? `<ul class="list" style="margin-top:6px">${j.gols.map((g, k) => `
+        <li>${avatarDe(g.autor)}
+          <div class="who"><b>⚽ ${esc(nomeDe(g.autor))}</b><span>${colete(timeDe(g.autor))} ${nomeTime(timeDe(g.autor))}${posAssist() ? ` · ${g.assist ? `🎯 ${esc(nomeDe(g.assist))}` : "sem assistência"}` : ""}</span></div>
+          <button class="btn ghost sm" data-act="posApagarGol" data-g="${k}">Remover</button></li>`).join("")}</ul>` : ""}
+
+      ${stats.length ? `
+        <div class="sub-title">Outras estatísticas (${j.lances.reduce((s, l) => s + l.qtd, 0)})</div>
+        <form data-form="posLance" class="row">
+          <select class="input" name="jogador" required aria-label="Jogador"><option value="">Jogador</option>${grupos}</select>
+          <select class="input" name="metrica" required aria-label="Estatística">${stats.map(([v, nome]) => `<option value="${esc(v)}" ${v === P.metrica ? "selected" : ""}>${esc(nome)}</option>`).join("")}</select>
+          <button class="btn">+ Marcar</button>
+        </form>
+        ${j.lances.length ? `<ul class="list" style="margin-top:6px">${j.lances.map((l, k) => `
+          <li>${avatarDe(l.jogador)}
+            <div class="who"><b>${esc(nomeDe(l.jogador))}</b><span>${esc(nomeLance(l.metrica))} × ${l.qtd}</span></div>
+            <button class="btn ghost sm" data-act="posMenosLance" data-l="${k}">−1</button></li>`).join("")}</ul>` : ""}` : ""}
+      <button class="btn block" data-act="posFechar">Jogo ${i + 1} pronto</button>
+    </section>`;
+}
+
+function corpoModoPartida(){
+  const pa = app.partidas.find(x => x.data === state.novaData);
+  const opt = (act, titulo, desc) => `<div class="opt" data-act="${act}"><div class="opt-head"><span class="radio"></span><div><b>${titulo}</b><span>${desc}</span></div></div></div>`;
+  return `<button class="x" data-act="fecharModal" aria-label="Fechar">×</button>
+    <div class="eyebrow">Nova partida · ${dataLonga(state.novaData)}</div>
+    <div class="h2">Como você vai anotar?</div>
+    <div style="margin-top:14px">
+      ${opt("modoAoVivo", "Ao vivo", "Durante a pelada: coloque os jogos em campo e marque o placar na aba Times da noite. Gols e estatísticas ficam no card Partidas.")}
+      ${opt("modoPos", "Pós-pelada", "A pelada já acabou: separe os 4 times, diga quem jogou contra quem e lance placar, gols e estatísticas de cada jogo.")}
+    </div>
+    ${pa ? `<p class="hint" style="margin-top:12px">Já existe uma partida nessa data. Ao vivo continua nela; o pós-pelada substitui o que foi lançado quando você salvar.</p>` : ""}`;
+}
+
+function corpoResumoPos(){
+  const P = state.pos, totais = totaisPos();
+  const jogaram = POS_TIMES.flatMap(elencoPos);
+  return `<button class="x" data-act="fecharModal" aria-label="Fechar">×</button>
+    <div class="eyebrow">Confira antes de salvar</div>
+    <div class="h2">${P.corrigindo ? "Correção" : "Pós-pelada"} de ${dataLonga(P.data)}</div>
+    <div class="lista-sub">Jogos <span>${plural(P.jogos.length, "jogo", "jogos")}</span></div>
+    <ul class="list">${P.jogos.map((j, i) => {
+      const [a, b] = placarPos(j);
+      const autores = [...j.gols.map(g => esc(nomeDe(g.autor))),
+        ...j.lances.filter(l => l.metrica === "gol_contra").map(l => `${esc(nomeDe(l.jogador))} (contra${l.qtd > 1 ? ` ×${l.qtd}` : ""})`)];
+      return `
+      <li><span class="num">${i + 1}</span><div class="who"><b>${nomeTime(j.a)} ${a} x ${b} ${nomeTime(j.b)}</b>
+        <span>${autores.length ? autores.join(", ") : "Sem gols"}</span></div></li>`; }).join("")}</ul>
+    <div class="lista-sub">Por jogador <span>${plural(jogaram.length, "jogou", "jogaram")}</span></div>
+    <ul class="list">${jogaram.map(id => { const o = totais.get(id) || {}; return `
+      <li>${avatarDe(id)}<div class="who"><b>${esc(nomeDe(id))}</b>
+        <span>${Object.keys(o).length ? Object.entries(o).map(([k, n]) => `${esc(nomeStat(k))} ${n}`).join(" · ") : "Sem estatísticas"}</span></div>
+        ${colete(timeDe(id))}</li>`; }).join("")}</ul>
+    <div class="prazo off"><div>${previsaoCartola()}</div></div>
+    ${P.substitui ? `<p class="hint">O que foi lançado ao vivo nessa data é substituído.</p>` : ""}
+    <div class="dois"><button class="btn ghost" data-act="fecharModal">Corrigir</button><button class="btn" data-act="posSalvar">Salvar e atualizar</button></div>`;
 }
 
 function renderCardJogadores(){
@@ -2695,6 +2986,7 @@ function renderAjustes(){
 
 /* ===================== AÇÕES ===================== */
 async function recarregar(){ await carregar(); route(); }
+const irProJogo = () => { const el = document.getElementById("jogoAberto"); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); };
 async function salvarPelada(campos){
   ok(await sb.from("peladas").update(campos).eq("id", app.pelada.id));
   Object.assign(app.pelada, campos);
@@ -2839,6 +3131,87 @@ const ACOES = {
     route(true);
   }),
   apagarGol: el => run(async () => { ok(await sb.from("gols").delete().eq("id", el.dataset.id)); await recarregar(); }),
+
+  // nova partida: ao vivo (como sempre foi) ou pós-pelada
+  modoAoVivo: () => run(async () => {
+    const data = state.novaData;
+    const nova = app.partidas.find(p => p.data === data)
+      || ok(await sb.from("partidas").insert({ pelada_id: app.pelada.id, data }).select("id").single());
+    state.modal = null;
+    renderModal();
+    await carregar();
+    state.partida = nova.id;
+    route();
+  }),
+  modoPos: () => run(async () => { state.modal = null; renderModal(); await abrirPos(state.novaData); }),
+  posCorrigir: el => run(() => abrirPos(el.dataset.data)),
+  posContinuar: () => run(() => abrirPos(rascunhoPos().data)),
+  posDescartar: () => { state.pos = null; guardarPos(); route(true); aviso("Rascunho descartado"); },
+  posTime: el => {
+    const id = el.dataset.id, n = Number(el.dataset.time);
+    if (state.pos.times[id] === n) delete state.pos.times[id]; else state.pos.times[id] = n;
+    guardarPos(); route(true);
+  },
+  posExtra: () => {
+    const id = (document.getElementById("posExtra") || {}).value;
+    if (!id) return;
+    state.pos.extras.push(id);
+    guardarPos(); route(true);
+  },
+  posTodos: () => { state.pos.todos = true; guardarPos(); route(true); },
+  posCriarTimes: () => {
+    const vazio = POS_TIMES.find(n => !elencoPos(n).length);
+    if (vazio) return aviso(`O time ${nomeTime(vazio)} está sem jogador.`);
+    const fora = podarJogos(), primeira = !state.pos.jogos.length;
+    state.pos.passo = "jogos";
+    guardarPos(); route();
+    aviso(fora ? `Times salvos. ${plural(fora, "lance saiu", "lances saíram")} porque o jogador mudou de time.` : primeira ? "Times criados! Agora lance os jogos." : "Times salvos");
+  },
+  posPasso: el => {
+    if (el.dataset.passo === "jogos") { if (state.pos.passo !== "jogos") ACOES.posCriarTimes(); return; }
+    state.pos.passo = "times";
+    guardarPos(); route();
+  },
+  posAbrir: el => {
+    const i = Number(el.dataset.i);
+    state.pos.aberto = state.pos.aberto === i ? null : i;
+    guardarPos(); route(true); irProJogo();
+  },
+  posFechar: () => { state.pos.aberto = null; guardarPos(); route(true); },
+  posApagarJogo: el => {
+    state.pos.jogos.splice(Number(el.dataset.i), 1);
+    state.pos.aberto = null;
+    guardarPos(); route(true);
+    aviso("Jogo excluído");
+  },
+  posApagarGol: el => { jogoAberto().gols.splice(Number(el.dataset.g), 1); guardarPos(); route(true); },
+  posMenosLance: el => {
+    const j = jogoAberto(), k = Number(el.dataset.l);
+    if (--j.lances[k].qtd < 1) j.lances.splice(k, 1);
+    guardarPos(); route(true);
+  },
+  posConferir: () => {
+    if (!state.pos.jogos.length) return aviso("Lance pelo menos um jogo.");
+    state.modal = "resumoPos";
+    renderModal();
+  },
+  posSalvar: el => run(async () => {
+    const P = state.pos;
+    el.disabled = true;
+    let r;
+    try {
+      r = ok(await sb.rpc("salvar_pos_pelada", { p: app.pelada.id, d: P.data,
+        times: Object.entries(P.times).map(([jogador_id, time]) => ({ jogador_id, time })),
+        jogos: P.jogos.map(j => ({ a: j.a, b: j.b, gols: j.gols.map(g => ({ autor: g.autor, assist: g.assist || null })), lances: j.lances })) }));
+    } catch (e) { el.disabled = false; throw e; }
+    state.pos = null; guardarPos();
+    state.modal = null; renderModal();
+    await carregar();
+    state.partida = r.partida;
+    if (location.hash === "#pelada") route(); else location.hash = "pelada";
+    aviso(`Partida salva e rankings atualizados.${r.cartola === "encerrada" ? ` Rodada ${r.rodada} do Cartola encerrada.`
+      : r.cartola === "recalculada" ? ` Rodada ${r.rodada} do Cartola recalculada.` : ""}`);
+  }),
   apagarLance: el => run(async () => {
     const q = Number(el.dataset.qtd);
     ok(q > 1 ? await sb.from("lances").update({ qtd: q - 1 }).eq("id", el.dataset.id) : await sb.from("lances").delete().eq("id", el.dataset.id));
@@ -3137,12 +3510,33 @@ const FORMS = {
     route(true);
   }),
   novaPartida: (f, d) => run(async () => {
-    const nova = app.partidas.find(p => p.data === d.get("data"))
-      || ok(await sb.from("partidas").insert({ pelada_id: app.pelada.id, data: d.get("data") }).select("id").single());
-    await carregar();
-    state.partida = nova.id;
-    route();
+    const data = d.get("data"), pa = app.partidas.find(p => p.data === data);
+    if (pa && pa.modo === "pos_pelada") return abrirPos(data);   // já foi lançada no pós-pelada: abre pra corrigir
+    state.novaData = data;
+    state.modal = "modoPartida";
+    renderModal();
   }),
+  posJogo: (f, d) => {
+    const a = Number(d.get("a")), b = Number(d.get("b"));
+    if (a === b) return aviso("Escolha dois times diferentes.");
+    state.pos.jogos.push({ a, b, gols: [], lances: [] });
+    state.pos.aberto = state.pos.jogos.length - 1;
+    guardarPos(); route(true); irProJogo();
+  },
+  posGol: (f, d) => {
+    const autor = d.get("autor"), assist = d.get("assist") || null;
+    if (assist === autor) return aviso("Quem fez o gol não pode dar a assistência.");
+    if (assist && timeDe(assist) !== timeDe(autor)) return aviso("A assistência tem que ser de alguém do mesmo time.");
+    jogoAberto().gols.push({ autor, assist });
+    guardarPos(); route(true);
+  },
+  posLance: (f, d) => {
+    const j = jogoAberto(), jogador = d.get("jogador"), metrica = d.get("metrica");
+    const l = j.lances.find(x => x.jogador === jogador && x.metrica === metrica);
+    if (l) l.qtd++; else j.lances.push({ jogador, metrica, qtd: 1 });
+    state.pos.metrica = metrica;
+    guardarPos(); route(true);
+  },
   novoGol: (f, d) => run(async () => {
     ok(await sb.from("gols").insert({
       pelada_id: app.pelada.id, partida_id: state.partida,
