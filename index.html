@@ -714,6 +714,7 @@ function rankingGlobal(periodo){
 
 /* ===================== ROTAS ===================== */
 function route(manterScroll){
+  const y = window.scrollY;
   const chip = document.getElementById("meChip");
   chip.innerHTML = app.perfil ? `${avatar(app.perfil.nome, app.perfil.foto_url)}${esc(nomeExibido())}` : "";
   chip.href = app.modoDev ? "#ajustes" : "#pelada";
@@ -747,7 +748,8 @@ function route(manterScroll){
   inserirPatrocinio();
   renderModal();
   popupAutomatico();
-  if (!manterScroll) window.scrollTo(0, 0);
+  // redesenhar a tela pode fazer o navegador perder a posição: volta pra onde a pessoa estava
+  window.scrollTo(0, manterScroll ? y : 0);
 }
 window.addEventListener("hashchange", () => { if (!location.hash.startsWith("#convite=")) route(); });
 
@@ -2633,6 +2635,8 @@ function renderPosPelada(){
     ${noTimes ? posPassoTimes() : posPassoJogos()}`;
 }
 
+const situacaoPos = id => timeDe(id) ? `Time ${nomeTime(timeDe(id))}` : state.pos.confirmados.includes(id) ? "Confirmado · sem time" : "Sem time";
+
 function posPassoTimes(){
   const P = state.pos;
   const base = P.todos ? app.membros.map(m => m.jogador_id) : [...P.confirmados, ...P.extras, ...Object.keys(P.times)];
@@ -2640,12 +2644,12 @@ function posPassoTimes(){
   const outros = app.membros.map(m => m.jogador_id).filter(id => !ids.includes(id)).sort((a, b) => nomeDe(a).localeCompare(nomeDe(b), "pt-BR"));
   return `
     <section class="card fade" style="animation-delay:.04s">
-      <div class="row">${POS_TIMES.map(n => `<span class="pill soft">${colete(n)}${nomeTime(n)} · ${elencoPos(n).length}</span>`).join("")}</div>
+      <div class="row">${POS_TIMES.map(n => `<span class="pill soft">${colete(n)}${nomeTime(n)} · <span data-conta="${n}">${elencoPos(n).length}</span></span>`).join("")}</div>
       ${ids.length ? `<ul class="list" style="margin-top:8px">${ids.map(id => `
         <li class="escolha">
           ${avatarDe(id)}
           <div class="who"><b>${esc(nomeDe(id))}${(membroDe(id) || {}).posicao ? `<span class="pos-tag">${membroDe(id).posicao}</span>` : ""}</b>
-            <span>${timeDe(id) ? `Time ${nomeTime(timeDe(id))}` : P.confirmados.includes(id) ? "Confirmado · sem time" : "Sem time"}</span></div>
+            <span data-situacao>${situacaoPos(id)}</span></div>
           <div class="seg full">${POS_TIMES.map(n => `<button class="${timeDe(id) === n ? "on" : ""}" data-act="posTime" data-id="${id}" data-time="${n}" aria-label="${esc(nomeDe(id))} no time ${nomeTime(n)}">${colete(n)}${nomeTime(n)}</button>`).join("")}</div>
         </li>`).join("")}</ul>`
       : `<div class="empty">Ninguém confirmou nessa data.<br>Adicione quem jogou ou mostre o elenco todo.</div>`}
@@ -3150,7 +3154,12 @@ const ACOES = {
   posTime: el => {
     const id = el.dataset.id, n = Number(el.dataset.time);
     if (state.pos.times[id] === n) delete state.pos.times[id]; else state.pos.times[id] = n;
-    guardarPos(); route(true);
+    guardarPos();
+    // só mexe na linha tocada e nos contadores: redesenhar a lista toda fazia a página pular pro topo
+    const li = el.closest("li");
+    li.querySelectorAll('[data-act="posTime"]').forEach(b => b.classList.toggle("on", Number(b.dataset.time) === timeDe(id)));
+    li.querySelector("[data-situacao]").textContent = situacaoPos(id);
+    POS_TIMES.forEach(t => { const c = view.querySelector(`[data-conta="${t}"]`); if (c) c.textContent = elencoPos(t).length; });
   },
   posExtra: () => {
     const id = (document.getElementById("posExtra") || {}).value;
