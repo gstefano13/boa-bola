@@ -300,6 +300,16 @@ button.pill{font:inherit;font-size:12.5px;font-weight:500;border:0;cursor:pointe
 .placar .stepper{margin-top:4px}
 
 /* pós-pelada */
+.etapas{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-top:14px}
+.etapa{display:flex;gap:10px;align-items:center;text-align:left;padding:10px 12px;border-radius:var(--r-md);border:1px solid var(--line);background:var(--soft);color:var(--ink);cursor:pointer;min-width:0}
+.etapa b{display:block;font-size:13.5px;font-weight:600}
+.etapa small{display:block;font-size:11.5px;color:var(--ink-3)}
+.etapa.on{background:var(--card);border:1.5px solid var(--ink)}
+.etapa.on .num{background:var(--lime);border-color:var(--lime)}
+.etapa.feita .num{background:var(--ink);border-color:var(--ink);color:#fff}
+.etapa:disabled{opacity:.55;cursor:default}
+.card.travada{opacity:.55}
+.card.etapa-card{outline:2px solid var(--lime)}
 .abas-time button{display:flex;flex-direction:column;align-items:center;gap:1px;line-height:1.2}
 .abas-time small{font-size:11px;opacity:.7;font-weight:500}
 .list li.stat-jog{flex-wrap:wrap;row-gap:8px}
@@ -2481,6 +2491,7 @@ const guardarPos = () => gravar("pos." + app.pelada.id, state.pos && state.pos.d
 const timeDe = id => state.pos.times[id] || 0;
 const elencoPos = n => Object.keys(state.pos.times).filter(id => state.pos.times[id] === n).sort((a, b) => nomeDe(a).localeCompare(nomeDe(b), "pt-BR"));
 const timesProntos = () => POS_TIMES.every(n => elencoPos(n).length);
+const contagemTimes = () => POS_TIMES.map(t => `${nomeTimePos(t)} ${elencoPos(t).length}/${TAM_TIME_POS}`).join(" · ");
 const jogoAberto = () => state.pos.jogos[state.pos.aberto];
 const metricaLigada = chave => app.pelada.metricas.some(m => m.chave === chave && m.ativo);
 const scoutLigado = cod => app.pelada.cartola_ativo && !(app.pelada.cartola_scouts_off || []).includes(cod);
@@ -2567,7 +2578,7 @@ async function abrirPos(data){
     ])).map(ok);
     const corrigindo = !!pa && pa.modo === "pos_pelada";
     const timesSalvos = Object.fromEntries(times.filter(t => POS_TIMES.includes(t.time)).map(t => [t.jogador_id, t.time]));
-    state.pos = { data, corrigindo, passo: corrigindo ? "jogos" : "times", aberto: null, todos: false, extras: [], timeAtual: 1,
+    state.pos = { data, corrigindo, passo: corrigindo ? "jogos" : "times", timesOk: corrigindo, aberto: null, todos: false, extras: [], timeAtual: 1,
       modoTimes: Object.keys(timesSalvos).length ? "selecionar" : null,
       substitui: !!pa && !corrigindo && [app.gols, app.lances, app.presencas].some(xs => xs.some(x => x.partida_id === pa.id)),
       confirmados: lista.filter(l => l.situacao === "confirmado").map(l => l.jogador_id),
@@ -2601,6 +2612,7 @@ function renderPosPelada(){
     return;
   }
   const noTimes = P.passo === "times";
+  if (!noTimes) P.timesOk = true;   // rascunho antigo ou correção: os times já foram confirmados
   view.innerHTML = `
     <section class="card fade">
       <div class="card-head" style="margin-bottom:0">
@@ -2608,9 +2620,11 @@ function renderPosPelada(){
           <div class="h2">${noTimes ? "Separar times" : "Registrar partidas"}</div></div>
         <a class="btn ghost sm" href="#pelada">Sair</a>
       </div>
-      <div class="seg full" style="margin-top:14px">
-        <button class="${noTimes ? "on" : ""}" data-act="posPasso" data-passo="times">1 · Separar times</button>
-        <button class="${noTimes ? "" : "on"}" data-act="posPasso" data-passo="jogos">2 · Registrar partidas</button>
+      <div class="etapas">
+        <button class="etapa ${noTimes ? "on" : "feita"}" data-act="posPasso" data-passo="times">
+          <span class="num">${noTimes ? 1 : "✓"}</span><span><b>Separar times</b><small>${noTimes ? "etapa atual" : "feita · toque pra editar"}</small></span></button>
+        <button class="etapa ${noTimes ? "" : "on"}" data-act="posPasso" data-passo="jogos" ${P.timesOk ? "" : "disabled"}>
+          <span class="num">${P.timesOk ? 2 : "🔒"}</span><span><b>Registrar partidas</b><small>${!noTimes ? "etapa atual" : P.timesOk ? "liberada" : "depois de confirmar os times"}</small></span></button>
       </div>
       <p class="note">${noTimes ? "Sorteie os 4 times ou escolha quem jogou em cada um."
         : "Escolha os times que se enfrentaram: os jogadores já vêm de cada time. Depois toque em + no que cada um fez."}
@@ -2675,10 +2689,21 @@ function posPassoTimes(){
       ${modo ? "" : `<p class="note">Sortear monta 4 times equilibrados com os confirmados. Selecionar deixa você montar time por time (A, B, C e D), até ${TAM_TIME_POS} em cada.</p>`}
     </section>
     ${corpo}
-    ${modo ? `<section class="card fade" style="animation-delay:.08s">
-      <button class="btn block" style="margin-top:0" data-act="posCriarTimes" ${timesProntos() ? "" : "disabled"}>Registrar partidas</button>
-      <p class="hint" style="text-align:center">${timesProntos() ? POS_TIMES.map(t => `${letraTime(t)} ${elencoPos(t).length}`).join(" · ") : "Coloque pelo menos 1 jogador em cada time."}</p>
-    </section>` : ""}`;
+    ${!modo ? "" : P.timesOk ? `
+    <section class="card fade etapa-card" id="etapa2" style="animation-delay:.08s">
+      <div class="eyebrow">Etapa 2 liberada</div><div class="h2">Registrar partidas</div>
+      <p class="note">Times confirmados (${contagemTimes()}). Agora escolha quem enfrentou quem e marque o que cada jogador fez.</p>
+      <button class="btn block" data-act="posCriarTimes">Registrar partidas</button>
+    </section>` : `
+    <section class="card fade" style="animation-delay:.08s">
+      <div class="eyebrow">Etapa 1</div><div class="h2">Confirmar times</div>
+      <p class="note">${timesProntos() ? `${contagemTimes()}. Confira e confirme pra liberar a etapa 2.` : "Coloque pelo menos 1 jogador em cada time pra confirmar."}</p>
+      <button class="btn block" data-act="posConfirmarTimes" ${timesProntos() ? "" : "disabled"}>Confirmar times</button>
+    </section>
+    <section class="card fade travada" style="animation-delay:.1s">
+      <div class="eyebrow">Etapa 2 · 🔒 bloqueada</div><div class="h2">Registrar partidas</div>
+      <p class="note">Libera quando você confirmar os times.</p>
+    </section>`}`;
 }
 
 function posPassoJogos(){
@@ -3163,7 +3188,16 @@ const ACOES = {
         else aviso("Os 4 times estão completos!");
       }
     }
+    if (!timesProntos()) P.timesOk = false;
     guardarPos(); route(true);
+  },
+  posConfirmarTimes: () => {
+    if (!timesProntos()) return aviso("Coloque pelo menos 1 jogador em cada time.");
+    state.pos.timesOk = true;
+    guardarPos(); route(true);
+    const e = document.getElementById("etapa2");
+    if (e) e.scrollIntoView({ behavior: "smooth", block: "center" });
+    aviso("Times confirmados! Etapa 2 liberada.");
   },
   posTimeAtual: el => { state.pos.timeAtual = Number(el.dataset.time); guardarPos(); route(true); },
   posModoTimes: el => { state.pos.modoTimes = el.dataset.valor; guardarPos(); route(true); },
@@ -3172,7 +3206,7 @@ const ACOES = {
     const P = state.pos, max = POS_TIMES.length * TAM_TIME_POS;
     const ordem = [...new Set([...P.confirmados, ...P.extras, ...candidatosPos()])].filter(id => candidatosPos().includes(id));
     if (ordem.length < POS_TIMES.length) return aviso("Precisa de pelo menos 4 jogadores pra sortear.");
-    P.times = {};
+    P.times = {}; P.timesOk = false;
     sortearTimes(ordem.slice(0, max), POS_TIMES.length).forEach((grupo, i) => grupo.forEach(id => { P.times[id] = i + 1; }));
     guardarPos(); route(true);
     aviso(ordem.length > max ? `Times sorteados com os ${max} primeiros confirmados.` : "Times sorteados e equilibrados!");
@@ -3193,7 +3227,10 @@ const ACOES = {
     aviso(fora ? `Times salvos. ${plural(fora, "lance saiu", "lances saíram")} porque o jogador mudou de time.` : primeira ? "Times prontos! Agora registre as partidas." : "Times salvos");
   },
   posPasso: el => {
-    if (el.dataset.passo === "jogos") { if (state.pos.passo !== "jogos") ACOES.posCriarTimes(); return; }
+    if (el.dataset.passo === "jogos") {
+      if (state.pos.passo === "jogos") return;
+      return state.pos.timesOk ? ACOES.posCriarTimes() : aviso("Confirme os times primeiro.");
+    }
     state.pos.passo = "times";
     guardarPos(); route();
   },
