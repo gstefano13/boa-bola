@@ -300,8 +300,16 @@ button.pill{font:inherit;font-size:12.5px;font-weight:500;border:0;cursor:pointe
 .placar .stepper{margin-top:4px}
 
 /* pós-pelada */
-.list li.escolha{flex-wrap:wrap;row-gap:10px}
-.list li.escolha .seg{flex:1 1 100%}
+.abas-time button{display:flex;flex-direction:column;align-items:center;gap:1px;line-height:1.2}
+.abas-time small{font-size:11px;opacity:.7;font-weight:500}
+.list li.stat-jog{flex-wrap:wrap;row-gap:8px}
+.mini-steps{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:6px}
+.mini{display:inline-flex;align-items:center;gap:4px;background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:3px 4px 3px 12px;font-size:12.5px}
+.mini span{color:var(--ink-2);margin-right:2px}
+.mini button{width:30px;height:30px;border-radius:50%;background:#fff;box-shadow:var(--shadow);font-size:16px}
+.mini button:disabled{opacity:.35;box-shadow:none}
+.mini b{min-width:16px;text-align:center;font-weight:600}
+.mini.tem{background:var(--lime-tint);border-color:#E2F4BE}
 .selo-time{width:22px;height:22px;border-radius:50%;background:var(--ink);color:#fff;display:inline-grid;place-items:center;font-size:12px;font-weight:600;flex:none;margin-right:6px}
 .placar .lado .selo-time{width:30px;height:30px;font-size:15px;margin:0}
 .elencos .selo-time{margin:0}
@@ -2464,7 +2472,7 @@ function cardPartidas(){
    (sorteio ou na mão), registra cada partida (quem enfrentou quem) com gols e estatísticas.
    O rascunho fica no aparelho até salvar; o banco grava tudo de uma vez (salvar_pos_pelada)
    e encerra ou recalcula a rodada do Cartola. */
-const POS_TIMES = [1, 2, 3, 4];
+const POS_TIMES = [1, 2, 3, 4], TAM_TIME_POS = 6;
 const letraTime = n => "ABCD"[n - 1] || "?";
 const nomeTimePos = n => `Time ${letraTime(n)}`;
 const seloTime = n => `<span class="selo-time">${letraTime(n)}</span>`;
@@ -2481,7 +2489,6 @@ const posVitoria = () => metricaLigada("vitorias") || scoutLigado("V");
 // o que ele anota partida a partida: só as estatísticas ligadas na pelada (vitória e baliza zero saem do placar)
 const posStats = () => opcoesLance().filter(([v]) => v !== "vitorias" && v !== "SG");
 const nomeStat = k => k === "G" ? "⚽" : k === "A" ? "🎯" : k === "V" ? "Vitória" : nomeLance(k);
-const situacaoPos = id => timeDe(id) ? nomeTimePos(timeDe(id)) : state.pos.confirmados.includes(id) ? "Confirmado · sem time" : "Sem time";
 // quem aparece pra separar: confirmados da data, quem ele adicionou e quem já está num time
 const candidatosPos = () => {
   const P = state.pos, base = P.todos ? app.membros.map(m => m.jogador_id) : [...P.confirmados, ...P.extras, ...Object.keys(P.times)];
@@ -2560,7 +2567,7 @@ async function abrirPos(data){
     ])).map(ok);
     const corrigindo = !!pa && pa.modo === "pos_pelada";
     const timesSalvos = Object.fromEntries(times.filter(t => POS_TIMES.includes(t.time)).map(t => [t.jogador_id, t.time]));
-    state.pos = { data, corrigindo, passo: corrigindo ? "jogos" : "times", aberto: null, todos: false, extras: [], metrica: null,
+    state.pos = { data, corrigindo, passo: corrigindo ? "jogos" : "times", aberto: null, todos: false, extras: [], timeAtual: 1,
       modoTimes: Object.keys(timesSalvos).length ? "selecionar" : null,
       substitui: !!pa && !corrigindo && [app.gols, app.lances, app.presencas].some(xs => xs.some(x => x.partida_id === pa.id)),
       confirmados: lista.filter(l => l.situacao === "confirmado").map(l => l.jogador_id),
@@ -2606,7 +2613,7 @@ function renderPosPelada(){
         <button class="${noTimes ? "" : "on"}" data-act="posPasso" data-passo="jogos">2 · Registrar partidas</button>
       </div>
       <p class="note">${noTimes ? "Sorteie os 4 times ou escolha quem jogou em cada um."
-        : "Escolha os times que se enfrentaram: os jogadores já vêm de cada time. Depois registre os gols e as estatísticas."}
+        : "Escolha os times que se enfrentaram: os jogadores já vêm de cada time. Depois toque em + no que cada um fez."}
         O rascunho fica salvo neste aparelho até você salvar.</p>
       ${P.substitui ? `<p class="hint">Essa data já tem coisas registradas. Ao salvar, o novo registro substitui tudo.</p>` : ""}
     </section>
@@ -2622,29 +2629,42 @@ function posPassoTimes(){
       <button class="btn ghost" data-act="posExtra">Adicionar</button>
     </div>
     ${P.todos ? "" : `<button class="lnk" data-act="posTodos" style="margin-top:12px;background:none">Mostrar o elenco todo</button>`}` : "";
-  const contagem = `<div class="row">${POS_TIMES.map(n => `<span class="pill soft">${seloTime(n)}${nomeTimePos(n)} · <span data-conta="${n}">${elencoPos(n).length}</span></span>`).join("")}</div>`;
   let corpo = "";
   if (modo === "sortear") corpo = `
     <section class="card fade" style="animation-delay:.06s">
-      <div class="eyebrow">Sorteio equilibrado</div><div class="h2">${plural(ids.length, "jogador", "jogadores")} pra sortear</div>
-      <p class="note">Os times saem parelhos pela nota de cada um e pela posição. Quem não jogou, tire em <b>Selecionar jogadores</b>.</p>
+      <div class="eyebrow">Sorteio equilibrado</div><div class="h2">${plural(Math.min(ids.length, POS_TIMES.length * TAM_TIME_POS), "jogador", "jogadores")} pra sortear</div>
+      <p class="note">4 times de até ${TAM_TIME_POS}, parelhos pela nota de cada um e pela posição. Pra trocar alguém depois, use <b>Selecionar jogadores</b>.</p>
       ${adicionar}
       <button class="btn ${sorteados ? "ghost " : ""}block" data-act="posSortear" ${ids.length >= POS_TIMES.length ? "" : "disabled"}>${sorteados ? "Sortear de novo" : "Sortear 4 times"}</button>
-      ${sorteados ? `<div class="elencos" style="margin-top:16px">${POS_TIMES.map(n => `<div>${seloTime(n)}<span><b>${nomeTimePos(n)}:</b> ${elencoPos(n).map(id => esc(nomeDe(id))).join(", ") || "ninguém"}</span></div>`).join("")}</div>` : ""}
+      ${sorteados ? `<div class="elencos" style="margin-top:16px">${POS_TIMES.map(n => `<div>${seloTime(n)}<span><b>${nomeTimePos(n)} (${elencoPos(n).length}):</b> ${elencoPos(n).map(id => esc(nomeDe(id))).join(", ") || "ninguém"}</span></div>`).join("")}</div>` : ""}
     </section>`;
-  else if (modo === "selecionar") corpo = `
+  else if (modo === "selecionar") {
+    const n = P.timeAtual || 1, elenco = elencoPos(n), cheio = elenco.length >= TAM_TIME_POS;
+    const livres = ids.filter(id => !timeDe(id));
+    const linha = (id, acao) => `
+      <li class="${acao === "tirar" ? "" : cheio ? "li-off" : "click"}" ${acao === "tirar" || !cheio ? `data-act="posTime" data-id="${id}" data-time="${n}"` : ""}>
+        ${avatarDe(id)}
+        <div class="who"><b>${esc(nomeDe(id))}${(membroDe(id) || {}).posicao ? `<span class="pos-tag">${membroDe(id).posicao}</span>` : ""}</b>
+          <span>${P.confirmados.includes(id) ? "Confirmado" : "Adicionado"}</span></div>
+        ${acao === "tirar" ? `<span class="pill soft">Tirar</span>` : cheio ? "" : `<span class="pill lime">+ ${letraTime(n)}</span>`}
+      </li>`;
+    corpo = `
     <section class="card fade" style="animation-delay:.06s">
-      ${contagem}
-      ${ids.length ? `<ul class="list" style="margin-top:8px">${ids.map(id => `
-        <li class="escolha">
-          ${avatarDe(id)}
-          <div class="who"><b>${esc(nomeDe(id))}${(membroDe(id) || {}).posicao ? `<span class="pos-tag">${membroDe(id).posicao}</span>` : ""}</b>
-            <span data-situacao>${situacaoPos(id)}</span></div>
-          <div class="seg full">${POS_TIMES.map(n => `<button class="${timeDe(id) === n ? "on" : ""}" data-act="posTime" data-id="${id}" data-time="${n}" aria-label="${esc(nomeDe(id))} no ${nomeTimePos(n)}">${nomeTimePos(n)}</button>`).join("")}</div>
-        </li>`).join("")}</ul>`
-      : `<div class="empty">Ninguém confirmou nessa data.<br>Adicione quem jogou ou mostre o elenco todo.</div>`}
+      <div class="seg full abas-time">${POS_TIMES.map(t => `<button class="${t === n ? "on" : ""}" data-act="posTimeAtual" data-time="${t}">
+        ${nomeTimePos(t)}<small>${elencoPos(t).length}/${TAM_TIME_POS}</small></button>`).join("")}</div>
+      <div class="time-head" style="margin-top:16px">
+        <div class="h2">${seloTime(n)}${nomeTimePos(n)}</div>
+        <span class="pill ${cheio ? "lime" : "soft"}">${cheio ? "Completo · " : ""}${elenco.length}/${TAM_TIME_POS}</span>
+      </div>
+      ${elenco.length ? `<ul class="list" style="margin-top:6px">${elenco.map(id => linha(id, "tirar")).join("")}</ul>`
+        : `<p class="note">Toque nos confirmados abaixo pra colocar no ${nomeTimePos(n)}.</p>`}
+      <div class="lista-sub">${cheio ? `${nomeTimePos(n)} completo` : "Confirmados sem time"} <span>${plural(livres.length, "livre", "livres")}</span></div>
+      ${cheio ? `<p class="hint">Já tem ${TAM_TIME_POS} no ${nomeTimePos(n)}. Pra trocar alguém, toque em Tirar.</p>` : ""}
+      ${livres.length ? `<ul class="list">${livres.map(id => linha(id, "pôr")).join("")}</ul>`
+        : `<div class="empty">Todo mundo já está num time.</div>`}
       ${adicionar}
     </section>`;
+  }
   return `
     <section class="card fade" style="animation-delay:.04s">
       <div class="eyebrow">Separar times</div><div class="h2">Como você quer montar?</div>
@@ -2652,12 +2672,12 @@ function posPassoTimes(){
         <button class="${modo === "sortear" ? "on" : ""}" data-act="posModoTimes" data-valor="sortear">Sortear times</button>
         <button class="${modo === "selecionar" ? "on" : ""}" data-act="posModoTimes" data-valor="selecionar">Selecionar jogadores</button>
       </div>
-      ${modo ? "" : `<p class="note">Sortear monta 4 times equilibrados com os confirmados. Selecionar deixa você escolher quem jogou no Time A, B, C e D.</p>`}
+      ${modo ? "" : `<p class="note">Sortear monta 4 times equilibrados com os confirmados. Selecionar deixa você montar time por time (A, B, C e D), até ${TAM_TIME_POS} em cada.</p>`}
     </section>
     ${corpo}
     ${modo ? `<section class="card fade" style="animation-delay:.08s">
-      <button class="btn block" style="margin-top:0" data-act="posCriarTimes" id="posRegistrar" ${timesProntos() ? "" : "disabled"}>Registrar partidas</button>
-      <p class="hint" id="posFalta" style="text-align:center">${timesProntos() ? "" : "Coloque pelo menos 1 jogador em cada time."}</p>
+      <button class="btn block" style="margin-top:0" data-act="posCriarTimes" ${timesProntos() ? "" : "disabled"}>Registrar partidas</button>
+      <p class="hint" style="text-align:center">${timesProntos() ? POS_TIMES.map(t => `${letraTime(t)} ${elencoPos(t).length}`).join(" · ") : "Coloque pelo menos 1 jogador em cada time."}</p>
     </section>` : ""}`;
 }
 
@@ -2676,9 +2696,9 @@ function posPassoJogos(){
     <section class="card fade" style="animation-delay:.06s">
       <div class="eyebrow">Partidas da noite</div><div class="h2">${P.jogos.length ? plural(P.jogos.length, "partida registrada", "partidas registradas") : "Quais times se enfrentaram?"}</div>
       ${P.jogos.length ? `<ul class="list" style="margin-top:8px">${P.jogos.map((j, i) => {
-        const [a, b] = placarPos(j), est = j.lances.reduce((s, l) => s + l.qtd, 0);
+        const [a, b] = placarPos(j);
         return `<li class="click" data-act="posAbrir" data-i="${i}"><span class="num ${P.aberto === i ? "lime" : ""}">${i + 1}</span>
-          <div class="who"><b>${nomeTimePos(j.a)} ${a} x ${b} ${nomeTimePos(j.b)}</b><span>${plural(j.gols.length, "gol", "gols")}${est ? ` · ${plural(est, "estatística", "estatísticas")}` : ""}</span></div>
+          <div class="who"><b>${nomeTimePos(j.a)} ${a} x ${b} ${nomeTimePos(j.b)}</b><span>${resumoJogo(j) || "Sem estatísticas ainda"}</span></div>
           <span class="pill soft">${P.aberto === i ? "Aberta" : "Editar"}</span></li>`; }).join("")}</ul>` : ""}
       <form data-form="posJogo" style="margin-top:14px">
         <div class="two">
@@ -2698,10 +2718,33 @@ function posPassoJogos(){
     </section>`;
 }
 
+// estatísticas que dá pra marcar em cada jogador: gol, assistência e as ligadas na pelada
+const statsJogador = () => [["G", "Gol"], ...(posAssist() ? [["A", "Assist."]] : []), ...posStats()];
+function qtdStat(j, id, k){
+  if (k === "G") return j.gols.filter(g => g.autor === id).length;
+  if (k === "A") return j.gols.filter(g => g.assist === id).length;
+  return (j.lances.find(l => l.jogador === id && l.metrica === k) || {}).qtd || 0;
+}
+// "Angelim ⚽2 🎯1 · Braga ⚽1": quem fez o quê na partida
+function resumoJogo(j){
+  const ids = [...new Set([...j.gols.flatMap(g => [g.autor, g.assist]), ...j.lances.map(l => l.jogador)].filter(Boolean))];
+  return ids.map(id => `${esc(nomeDe(id))} ${statsJogador().map(([k, nome]) => [k, nome, qtdStat(j, id, k)]).filter(x => x[2])
+    .map(([k, nome, q]) => k === "G" ? `⚽${q}` : k === "A" ? `🎯${q}` : `${esc(nome)} ${q}`).join(" ")}`).join(" · ");
+}
+
 function cardJogoPos(){
-  const P = state.pos, i = P.aberto, j = jogoAberto(), [a, b] = placarPos(j), stats = posStats();
-  const grupos = `${[j.a, j.b].map(n => `<optgroup label="${nomeTimePos(n)}">${elencoPos(n).map(id => `<option value="${id}">${esc(nomeDe(id))}</option>`).join("")}</optgroup>`).join("")}`;
+  const P = state.pos, i = P.aberto, j = jogoAberto(), [a, b] = placarPos(j), stats = statsJogador();
   const temGC = stats.some(([v]) => v === "gol_contra");
+  const jogador = id => `
+    <li class="stat-jog">
+      ${avatarDe(id)}
+      <div class="who"><b>${esc(nomeDe(id))}</b></div>
+      <div class="mini-steps">${stats.map(([k, nome]) => { const q = qtdStat(j, id, k); return `
+        <div class="mini ${q ? "tem" : ""}"><span>${esc(nome)}</span>
+          <button data-act="posStat" data-id="${id}" data-k="${esc(k)}" data-d="-1" ${q ? "" : "disabled"} aria-label="Tirar ${esc(nome)} de ${esc(nomeDe(id))}">−</button>
+          <b>${q}</b>
+          <button data-act="posStat" data-id="${id}" data-k="${esc(k)}" data-d="1" aria-label="${esc(nome)} de ${esc(nomeDe(id))}">+</button></div>`; }).join("")}</div>
+    </li>`;
   return `
     <section class="card fade" id="jogoAberto">
       <div class="card-head" style="margin-bottom:0">
@@ -2713,30 +2756,10 @@ function cardJogoPos(){
         <div><span class="gols">${a}</span> <span class="x">x</span> <span class="gols">${b}</span></div>
         <div class="lado">${seloTime(j.b)}${nomeTimePos(j.b)}</div>
       </div>
-      <p class="hint" style="text-align:center">O placar sai dos gols registrados${temGC ? " (gol contra conta pro adversário)" : ""}.</p>
-
-      <div class="sub-title">Gols (${j.gols.length})</div>
-      <form data-form="posGol" class="row">
-        <select class="input" name="autor" required aria-label="Quem fez"><option value="">Quem fez</option>${grupos}</select>
-        ${posAssist() ? `<select class="input" name="assist" aria-label="Assistência"><option value="">Sem assistência</option>${grupos}</select>` : ""}
-        <button class="btn">+ Gol</button>
-      </form>
-      ${j.gols.length ? `<ul class="list" style="margin-top:6px">${j.gols.map((g, k) => `
-        <li>${avatarDe(g.autor)}
-          <div class="who"><b>⚽ ${esc(nomeDe(g.autor))}</b><span>${nomeTimePos(timeDe(g.autor))}${posAssist() ? ` · ${g.assist ? `🎯 ${esc(nomeDe(g.assist))}` : "sem assistência"}` : ""}</span></div>
-          <button class="btn ghost sm" data-act="posApagarGol" data-g="${k}">Remover</button></li>`).join("")}</ul>` : ""}
-
-      ${stats.length ? `
-        <div class="sub-title">Outras estatísticas (${j.lances.reduce((s, l) => s + l.qtd, 0)})</div>
-        <form data-form="posLance" class="row">
-          <select class="input" name="jogador" required aria-label="Jogador"><option value="">Jogador</option>${grupos}</select>
-          <select class="input" name="metrica" required aria-label="Estatística">${stats.map(([v, nome]) => `<option value="${esc(v)}" ${v === P.metrica ? "selected" : ""}>${esc(nome)}</option>`).join("")}</select>
-          <button class="btn">+ Marcar</button>
-        </form>
-        ${j.lances.length ? `<ul class="list" style="margin-top:6px">${j.lances.map((l, k) => `
-          <li>${avatarDe(l.jogador)}
-            <div class="who"><b>${esc(nomeDe(l.jogador))}</b><span>${esc(nomeLance(l.metrica))} × ${l.qtd}</span></div>
-            <button class="btn ghost sm" data-act="posMenosLance" data-l="${k}">−1</button></li>`).join("")}</ul>` : ""}` : ""}
+      <p class="hint" style="text-align:center">Toque em + no que cada jogador fez. O placar sai dos gols${temGC ? " (gol contra conta pro adversário)" : ""}.${posAssist() ? " A assistência vai num gol de alguém do mesmo time." : ""}</p>
+      ${[j.a, j.b].map(n => `
+        <div class="lista-sub">${nomeTimePos(n)} <span>${plural(elencoPos(n).length, "jogador", "jogadores")}</span></div>
+        <ul class="list">${elencoPos(n).map(jogador).join("")}</ul>`).join("")}
       <button class="btn block" data-act="posFechar">Partida ${i + 1} pronta</button>
     </section>`;
 }
@@ -3127,26 +3150,32 @@ const ACOES = {
   posCorrigir: el => run(() => abrirPos(el.dataset.data)),
   posContinuar: () => run(() => abrirPos(rascunhoPos().data)),
   posDescartar: () => { state.pos = null; guardarPos(); route(true); aviso("Rascunho descartado"); },
+  // põe ou tira do time que está aberto; com 6 o time trava e a tela pula pro próximo que falta
   posTime: el => {
-    const id = el.dataset.id, n = Number(el.dataset.time);
-    if (state.pos.times[id] === n) delete state.pos.times[id]; else state.pos.times[id] = n;
-    guardarPos();
-    // só mexe na linha tocada e nos contadores: redesenhar a lista toda fazia a página pular pro topo
-    const li = el.closest("li");
-    li.querySelectorAll('[data-act="posTime"]').forEach(b => b.classList.toggle("on", Number(b.dataset.time) === timeDe(id)));
-    li.querySelector("[data-situacao]").textContent = situacaoPos(id);
-    POS_TIMES.forEach(t => { const c = view.querySelector(`[data-conta="${t}"]`); if (c) c.textContent = elencoPos(t).length; });
-    document.getElementById("posRegistrar").disabled = !timesProntos();
-    document.getElementById("posFalta").textContent = timesProntos() ? "" : "Coloque pelo menos 1 jogador em cada time.";
+    const P = state.pos, id = el.dataset.id, n = Number(el.dataset.time);
+    if (P.times[id] === n) delete P.times[id];
+    else {
+      if (elencoPos(n).length >= TAM_TIME_POS) return aviso(`O ${nomeTimePos(n)} já tem ${TAM_TIME_POS}. Tire alguém antes.`);
+      P.times[id] = n;
+      if (elencoPos(n).length >= TAM_TIME_POS) {
+        const prox = POS_TIMES.find(t => elencoPos(t).length < TAM_TIME_POS);
+        if (prox) { P.timeAtual = prox; aviso(`${nomeTimePos(n)} completo! Agora o ${nomeTimePos(prox)}.`); }
+        else aviso("Os 4 times estão completos!");
+      }
+    }
+    guardarPos(); route(true);
   },
+  posTimeAtual: el => { state.pos.timeAtual = Number(el.dataset.time); guardarPos(); route(true); },
   posModoTimes: el => { state.pos.modoTimes = el.dataset.valor; guardarPos(); route(true); },
   posSortear: () => {
-    const ids = candidatosPos();
-    if (ids.length < POS_TIMES.length) return aviso("Precisa de pelo menos 4 jogadores pra sortear.");
-    state.pos.times = {};
-    sortearTimes(ids, POS_TIMES.length).forEach((grupo, i) => grupo.forEach(id => { state.pos.times[id] = i + 1; }));
+    // na ordem de quem confirmou primeiro, até 4 times de 6
+    const P = state.pos, max = POS_TIMES.length * TAM_TIME_POS;
+    const ordem = [...new Set([...P.confirmados, ...P.extras, ...candidatosPos()])].filter(id => candidatosPos().includes(id));
+    if (ordem.length < POS_TIMES.length) return aviso("Precisa de pelo menos 4 jogadores pra sortear.");
+    P.times = {};
+    sortearTimes(ordem.slice(0, max), POS_TIMES.length).forEach((grupo, i) => grupo.forEach(id => { P.times[id] = i + 1; }));
     guardarPos(); route(true);
-    aviso("Times sorteados e equilibrados!");
+    aviso(ordem.length > max ? `Times sorteados com os ${max} primeiros confirmados.` : "Times sorteados e equilibrados!");
   },
   posExtra: () => {
     const id = (document.getElementById("posExtra") || {}).value;
@@ -3180,10 +3209,26 @@ const ACOES = {
     guardarPos(); route(true);
     aviso("Partida excluída");
   },
-  posApagarGol: el => { jogoAberto().gols.splice(Number(el.dataset.g), 1); guardarPos(); route(true); },
-  posMenosLance: el => {
-    const j = jogoAberto(), k = Number(el.dataset.l);
-    if (--j.lances[k].qtd < 1) j.lances.splice(k, 1);
+  // −/+ de uma estatística de um jogador na partida aberta
+  posStat: el => {
+    const j = jogoAberto(), id = el.dataset.id, k = el.dataset.k, mais = el.dataset.d === "1";
+    if (k === "G") {
+      if (mais) j.gols.push({ autor: id, assist: null });
+      else {   // tira primeiro um gol sem assistência, pra não apagar a assistência de ninguém à toa
+        const meus = j.gols.filter(g => g.autor === id), g = meus.find(x => !x.assist) || meus[meus.length - 1];
+        if (g) { j.gols.splice(j.gols.indexOf(g), 1); if (g.assist) aviso(`A assistência de ${nomeDe(g.assist)} nesse gol saiu junto.`); }
+      }
+    } else if (k === "A") {
+      if (mais) {
+        const g = j.gols.find(x => !x.assist && x.autor !== id && timeDe(x.autor) === timeDe(id));
+        if (!g) return aviso("Marque primeiro o gol: a assistência vai num gol de alguém do mesmo time.");
+        g.assist = id;
+      } else { const g = [...j.gols].reverse().find(x => x.assist === id); if (g) g.assist = null; }
+    } else {
+      const l = j.lances.find(x => x.jogador === id && x.metrica === k);
+      if (mais) { if (l) l.qtd++; else j.lances.push({ jogador: id, metrica: k, qtd: 1 }); }
+      else if (l && --l.qtd < 1) j.lances.splice(j.lances.indexOf(l), 1);
+    }
     guardarPos(); route(true);
   },
   posConferir: () => {
@@ -3499,20 +3544,6 @@ const FORMS = {
     state.pos.jogos.push({ a, b, gols: [], lances: [] });
     state.pos.aberto = state.pos.jogos.length - 1;
     guardarPos(); route(true); irProJogo();
-  },
-  posGol: (f, d) => {
-    const autor = d.get("autor"), assist = d.get("assist") || null;
-    if (assist === autor) return aviso("Quem fez o gol não pode dar a assistência.");
-    if (assist && timeDe(assist) !== timeDe(autor)) return aviso("A assistência tem que ser de alguém do mesmo time.");
-    jogoAberto().gols.push({ autor, assist });
-    guardarPos(); route(true);
-  },
-  posLance: (f, d) => {
-    const j = jogoAberto(), jogador = d.get("jogador"), metrica = d.get("metrica");
-    const l = j.lances.find(x => x.jogador === jogador && x.metrica === metrica);
-    if (l) l.qtd++; else j.lances.push({ jogador, metrica, qtd: 1 });
-    state.pos.metrica = metrica;
-    guardarPos(); route(true);
   },
   cartNome: (f, d) => run(async () => {
     ok(await sb.rpc("cartola_renomear", { p: app.pelada.id, nome_: d.get("nome") }));
