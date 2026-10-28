@@ -310,6 +310,11 @@ button.pill{font:inherit;font-size:12.5px;font-weight:500;border:0;cursor:pointe
 .etapa:disabled{opacity:.55;cursor:default}
 .card.travada{opacity:.55}
 .card.etapa-card{outline:2px solid var(--lime)}
+.card-lime{background:var(--lime);color:var(--ink)}
+.card-lime .eyebrow,.card-lime .note,.card-lime .who span,.card-lime .lista-sub span{color:#2F4A08}
+.card-lime .list li{border-bottom-color:rgba(14,14,14,.12)}
+.card-lime .box{background:rgba(255,255,255,.55);border-color:rgba(14,14,14,.1)}
+.card-lime .btn.ghost{background:#fff;border-color:rgba(14,14,14,.12)}
 .abas-time button{display:flex;flex-direction:column;align-items:center;gap:1px;line-height:1.2}
 .abas-time small{font-size:11px;opacity:.7;font-weight:500}
 .list li.stat-jog{flex-wrap:wrap;row-gap:8px}
@@ -2460,7 +2465,7 @@ function cardPartidas(){
   const lista = state.verPartidas ? partidas : partidas.slice(0, 4);
   const resumo = pa => `${plural(app.presencas.filter(x => x.partida_id === pa.id).length, "jogador", "jogadores")} · ${plural(app.gols.filter(g => g.partida_id === pa.id).length, "gol", "gols")}`;
   return `
-    <section class="card fade" style="animation-delay:.03s">
+    <section class="card fade card-lime" style="animation-delay:.03s">
       <div class="eyebrow">Toda semana</div><div class="h2">Registrar pelada</div>
       <p class="note">Escolha a data, separe os times e registre as partidas com gols e estatísticas. Rankings e Cartola atualizam quando você salva.</p>
       ${rascunho && rascunho.data ? `<div class="box row" style="justify-content:space-between">
