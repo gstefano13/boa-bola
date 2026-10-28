@@ -302,8 +302,9 @@ button.pill{font:inherit;font-size:12.5px;font-weight:500;border:0;cursor:pointe
 /* pós-pelada */
 .list li.escolha{flex-wrap:wrap;row-gap:10px}
 .list li.escolha .seg{flex:1 1 100%}
-.seg button .colete{width:10px;height:10px;margin-right:5px;vertical-align:-1px}
-.seg button.on .colete{border-color:#fff}
+.selo-time{width:22px;height:22px;border-radius:50%;background:var(--ink);color:#fff;display:inline-grid;place-items:center;font-size:12px;font-weight:600;flex:none;margin-right:6px}
+.placar .lado .selo-time{width:30px;height:30px;font-size:15px;margin:0}
+.elencos .selo-time{margin:0}
 .opt[data-act]{cursor:pointer}
 .elencos{display:grid;gap:8px;margin-top:10px}
 .elencos div{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;line-height:1.45}
@@ -389,11 +390,11 @@ const vazio = () => ({ user: null, perfil: null, dev: false, modoDev: false, pat
   peladas: [], todas: [], membrosTodas: [], usuarios: [], global: null,
   pelada: null, membro: null, membros: [], partidas: [], gols: [], presencas: [], lances: [], medias: [], meusVotos: [], emails: new Map(), jogo: null, lista: [], confirmacoes: [], timesJogo: [], confrontos: [] });
 const app = vazio();
-const state = { periodo: "mes", stat: "gols", login: "codigo", loginEmail: "", loginPelada: "", partida: null,
+const state = { periodo: "mes", stat: "gols", login: "codigo", loginEmail: "", loginPelada: "",
   busca: "", filtro: "todas", verTodas: false, novaPelada: false, buscaUsu: "",
   buscaJog: "", filtroJog: "todos", verTodosJog: false, editando: null, addJogador: false, editMetrica: null,
   mercPos: "todos", mercBusca: "", mercOrdem: "media", mercTodos: false, pontRodada: null, faq: 0, renomear: false,
-  capitao: null, capitaoRodada: undefined, confirmEncerrar: false, editScout: null, ajustesAbertos: false, editarTime: false, formTime: null, modal: null, modalVisto: false, pos: null, novaData: null, votosVistos: new Set(), guiaPasso: 0, votarIds: [], troca: null };
+  capitao: null, capitaoRodada: undefined, confirmEncerrar: false, editScout: null, ajustesAbertos: false, editarTime: false, formTime: null, modal: null, modalVisto: false, pos: null, verPartidas: false, votosVistos: new Set(), guiaPasso: 0, votarIds: [], troca: null };
 
 /* ===================== REGRAS ===================== */
 const CHUTEIRAS = [
@@ -602,7 +603,7 @@ async function carregarTodas(){
 async function abrirPelada(id){
   app.pelada = app.peladas.find(p => p.id === id) || app.todas.find(p => p.id === id);
   if (!app.modoDev) gravar("pelada", id);
-  state.partida = null; state.editando = null; state.editMetrica = null; state.addJogador = false; state.verTodosJog = false;
+  state.pos = null; state.editando = null; state.editMetrica = null; state.addJogador = false; state.verTodosJog = false;
   await carregar();
   route();
 }
@@ -1734,8 +1735,8 @@ function cartPartidaHtml(r){
         ${scouts.length ? `<ul class="list" style="margin-top:4px">
           ${[...new Set(scouts.map(s => s.atleta))].map(a => `
             <li>${avatarDe(a)}<div class="who"><b>${esc(nomeDe(a))}</b><span>${scouts.filter(s => s.atleta === a).map(s => `${s.codigo} ${s.qtd}`).join(" · ")}</span></div></li>`).join("")}
-        </ul>` : `<p class="hint">Lance presença, gols e as outras métricas no card <b>Partidas</b>. Eles entram aqui sozinhos.</p>`}
-      </div>` : `<p class="hint">Crie a partida da semana no card <b>Partidas</b> e anote presença, gols e cartões. O Cartola usa esses dados.</p>`}`;
+        </ul>` : `<p class="hint">Registre a pelada em <b>Registrar pelada</b>: gols e estatísticas entram aqui sozinhos.</p>`}
+      </div>` : `<p class="hint">Use <b>Registrar pelada</b> pra separar os times e registrar as partidas. O Cartola usa esses dados.</p>`}`;
 }
 
 /* ---------- Cartola · painel do presidente e do dev ---------- */
@@ -2037,8 +2038,8 @@ function renderModal(){
   const el = document.getElementById("modal");
   const t = state.modal, j = app.jogo;
   if (t === "guia") { el.innerHTML = `<div class="sheet" data-act="nada" role="dialog" aria-modal="true" aria-label="Como funciona o Anotou">${corpoGuia()}</div>`; return; }
-  if (t === "modoPartida" || t === "resumoPos") {
-    el.innerHTML = `<div class="sheet" data-act="nada" role="dialog" aria-modal="true">${t === "modoPartida" ? corpoModoPartida() : corpoResumoPos()}</div>`;
+  if (t === "resumoPos") {
+    el.innerHTML = `<div class="sheet" data-act="nada" role="dialog" aria-modal="true">${corpoResumoPos()}</div>`;
     return;
   }
   if (!t || !j || !app.pelada) { el.innerHTML = ""; return; }
@@ -2437,100 +2438,58 @@ function cardMetricas(){
 }
 
 function cardPartidas(){
-  const partidas = [...app.partidas].reverse();
-  if (!partidas.some(x => x.id === state.partida)) state.partida = partidas[0] ? partidas[0].id : null;
-  const presentes = new Set(app.presencas.filter(x => x.partida_id === state.partida).map(x => x.jogador_id));
-  const golsDaPartida = app.gols.filter(g => g.partida_id === state.partida);
-  const manuais = opcoesLance();
-  const lancesDaPartida = app.lances.filter(l => l.partida_id === state.partida);
-  const candidatos = presentes.size ? [...presentes] : app.membros.map(m => m.jogador_id);
-  const opcoes = ids => ids.map(id => `<option value="${id}">${esc(nomeDe(id))}</option>`).join("");
-  const sel = partidas.find(x => x.id === state.partida);
-  const rascunho = rascunhoPos();
+  const partidas = [...app.partidas].reverse(), rascunho = rascunhoPos();
+  const lista = state.verPartidas ? partidas : partidas.slice(0, 4);
+  const resumo = pa => `${plural(app.presencas.filter(x => x.partida_id === pa.id).length, "jogador", "jogadores")} · ${plural(app.gols.filter(g => g.partida_id === pa.id).length, "gol", "gols")}`;
   return `
     <section class="card fade" style="animation-delay:.03s">
-      <div class="eyebrow">Toda semana</div><div class="h2">Partidas</div>
-      <form data-form="novaPartida" class="row" style="margin-top:14px">
-        <input class="input" type="date" name="data" value="${hoje()}" max="${hoje()}" required>
-        <button class="btn">Nova partida</button>
-      </form>
-      ${rascunho ? `<div class="box row" style="justify-content:space-between">
-        <div class="who"><b>Pós-pelada de ${dataCurta(rascunho.data)} sem salvar</b><span>${plural(rascunho.jogos.length, "jogo lançado", "jogos lançados")}</span></div>
+      <div class="eyebrow">Toda semana</div><div class="h2">Registrar pelada</div>
+      <p class="note">Escolha a data, separe os times e registre as partidas com gols e estatísticas. Rankings e Cartola atualizam quando você salva.</p>
+      ${rascunho && rascunho.data ? `<div class="box row" style="justify-content:space-between">
+        <div class="who"><b>Pelada de ${dataCurta(rascunho.data)} sem salvar</b><span>${plural(rascunho.jogos.length, "partida registrada", "partidas registradas")}</span></div>
         <div class="row"><button class="btn ghost sm" data-act="posDescartar">Descartar</button><button class="btn sm" data-act="posContinuar">Continuar</button></div>
       </div>` : ""}
+      <button class="btn block" data-act="registrarPelada">Registrar pelada</button>
       ${partidas.length ? `
-        <label class="field"><span>Partida</span>
-          <select class="input" data-change="selPartida">
-            ${partidas.map(x => `<option value="${x.id}" ${x.id===state.partida?"selected":""}>${dataLonga(x.data)}${x.modo === "pos_pelada" ? " · pós-pelada" : ""}</option>`).join("")}
-          </select>
-        </label>
-        ${sel.modo === "pos_pelada" ? `
-        <div class="box">
-          <b style="font-size:14px;font-weight:500">Lançada no pós-pelada</b>
-          <p class="note" style="margin-top:4px">${plural(presentes.size, "jogador", "jogadores")} · ${plural(golsDaPartida.length, "gol", "gols")} · ${plural(lancesDaPartida.filter(l => l.metrica !== "vitorias").reduce((s, l) => s + l.qtd, 0), "estatística", "estatísticas")}</p>
-          <p class="hint">Errou alguma coisa? Corrija os times, os jogos ou as estatísticas. Os rankings e a rodada do Cartola dessa partida são recalculados.</p>
-          <button class="btn block" data-act="posCorrigir" data-data="${sel.data}" style="margin-top:12px">Corrigir partida</button>
-        </div>` : `
-        <div class="sub-title">Quem jogou (${presentes.size})</div>
-        <ul class="list">
-          ${app.membros.map(m => `
-            <li><label class="check-row">
-              <input type="checkbox" data-change="presenca" data-jogador="${m.jogador_id}" ${presentes.has(m.jogador_id)?"checked":""}>
-              ${avatarDe(m.jogador_id)}
-              <div class="who"><b>${esc(nomeDe(m.jogador_id))}</b><span>${cap(m.tipo)}</span></div>
-            </label></li>`).join("")}
-        </ul>
-        <div class="sub-title">Gols da partida (${golsDaPartida.length})</div>
-        <form data-form="novoGol" class="row">
-          <select class="input" name="autor" required><option value="">Quem fez</option>${opcoes(candidatos)}</select>
-          <select class="input" name="assist"><option value="">Sem assistência</option>${opcoes(candidatos)}</select>
-          <button class="btn">+ Gol</button>
-        </form>
-        ${golsDaPartida.length ? `<ul class="list" style="margin-top:6px">
-          ${golsDaPartida.map(g => `
-            <li>
-              ${avatarDe(g.autor_id || g.assistencia_id)}
-              <div class="who"><b>${g.autor_id ? `⚽ ${esc(nomeDe(g.autor_id))}` : `🎯 ${esc(nomeDe(g.assistencia_id))}`}</b><span>${!g.autor_id ? "Assistência (autor do gol não registrado)" : g.assistencia_id ? `🎯 ${esc(nomeDe(g.assistencia_id))}` : "Sem assistência"}</span></div>
-              <button class="btn ghost sm" data-act="apagarGol" data-id="${g.id}">Remover</button>
-            </li>`).join("")}
-        </ul>` : ""}
-        ${manuais.length ? `
-          <div class="sub-title">Outras métricas (${lancesDaPartida.reduce((s, l) => s + l.qtd, 0)})</div>
-          ${app.pelada.cartola_ativo ? `<p class="hint" style="margin:0 0 8px">Tudo que você marca aqui (e os gols acima) vira ponto no Cartola sozinho, quando a rodada for encerrada.</p>` : ""}
-          <form data-form="novoLance" class="row">
-            <select class="input" name="jogador" required><option value="">Jogador</option>${opcoes(candidatos)}</select>
-            <select class="input" name="metrica" required>${manuais.map(([valor, nome]) => `<option value="${esc(valor)}">${esc(nome)}</option>`).join("")}</select>
-            <button class="btn">+ Marcar</button>
-          </form>
-          ${lancesDaPartida.length ? `<ul class="list" style="margin-top:6px">
-            ${lancesDaPartida.map(l => `
-              <li>
-                ${avatarDe(l.jogador_id)}
-                <div class="who"><b>${esc(nomeDe(l.jogador_id))}</b><span>${esc(nomeLance(l.metrica))} × ${l.qtd}</span></div>
-                <button class="btn ghost sm" data-act="apagarLance" data-id="${l.id}" data-qtd="${l.qtd}">−1</button>
-              </li>`).join("")}
-          </ul>` : ""}` : ""}`}
-      ` : `<p class="note">Crie a primeira partida pra marcar presença e lançar os gols.</p>`}
+        <div class="lista-sub">Peladas registradas <span>errou? corrija</span></div>
+        <ul class="list">${lista.map(pa => `
+          <li><div class="who"><b>${dataLonga(pa.data)}</b><span>${resumo(pa)}</span></div>
+            <button class="btn ghost sm" data-act="posCorrigir" data-data="${pa.data}">Corrigir</button></li>`).join("")}</ul>
+        ${partidas.length > 4 ? `<button class="lnk" data-act="verPartidas" style="margin-top:10px;background:none">${state.verPartidas ? "Ver menos" : `Ver todas (${partidas.length})`}</button>` : ""}` : ""}
     </section>`;
 }
 
-/* ===================== PÓS-PELADA =====================
-   O presidente lança a pelada depois que ela acabou: separa os 4 times, diz quem jogou
-   contra quem e anota o que aconteceu em cada jogo. O rascunho fica no aparelho até salvar;
-   o banco grava tudo de uma vez (salvar_pos_pelada) e encerra ou recalcula a rodada do Cartola. */
+/* ===================== REGISTRAR PELADA =====================
+   O presidente registra a pelada depois que ela acabou: escolhe a data, separa os 4 times
+   (sorteio ou na mão), registra cada partida (quem enfrentou quem) com gols e estatísticas.
+   O rascunho fica no aparelho até salvar; o banco grava tudo de uma vez (salvar_pos_pelada)
+   e encerra ou recalcula a rodada do Cartola. */
 const POS_TIMES = [1, 2, 3, 4];
+const letraTime = n => "ABCD"[n - 1] || "?";
+const nomeTimePos = n => `Time ${letraTime(n)}`;
+const seloTime = n => `<span class="selo-time">${letraTime(n)}</span>`;
 const rascunhoPos = () => { try { return JSON.parse(ler("pos." + app.pelada.id) || "null"); } catch { return null; } };
-const guardarPos = () => gravar("pos." + app.pelada.id, state.pos ? JSON.stringify(state.pos) : null);
+const guardarPos = () => gravar("pos." + app.pelada.id, state.pos && state.pos.data ? JSON.stringify(state.pos) : null);
 const timeDe = id => state.pos.times[id] || 0;
 const elencoPos = n => Object.keys(state.pos.times).filter(id => state.pos.times[id] === n).sort((a, b) => nomeDe(a).localeCompare(nomeDe(b), "pt-BR"));
+const timesProntos = () => POS_TIMES.every(n => elencoPos(n).length);
 const jogoAberto = () => state.pos.jogos[state.pos.aberto];
 const metricaLigada = chave => app.pelada.metricas.some(m => m.chave === chave && m.ativo);
 const scoutLigado = cod => app.pelada.cartola_ativo && !(app.pelada.cartola_scouts_off || []).includes(cod);
 const posAssist = () => metricaLigada("assistencias") || scoutLigado("A");
 const posVitoria = () => metricaLigada("vitorias") || scoutLigado("V");
-// o que ele anota jogo a jogo: só as estatísticas ligadas na pelada (vitória e baliza zero saem do placar)
+// o que ele anota partida a partida: só as estatísticas ligadas na pelada (vitória e baliza zero saem do placar)
 const posStats = () => opcoesLance().filter(([v]) => v !== "vitorias" && v !== "SG");
 const nomeStat = k => k === "G" ? "⚽" : k === "A" ? "🎯" : k === "V" ? "Vitória" : nomeLance(k);
+const situacaoPos = id => timeDe(id) ? nomeTimePos(timeDe(id)) : state.pos.confirmados.includes(id) ? "Confirmado · sem time" : "Sem time";
+// quem aparece pra separar: confirmados da data, quem ele adicionou e quem já está num time
+const candidatosPos = () => {
+  const P = state.pos, base = P.todos ? app.membros.map(m => m.jogador_id) : [...P.confirmados, ...P.extras, ...Object.keys(P.times)];
+  return [...new Set(base)].filter(membroDe).sort((a, b) => nomeDe(a).localeCompare(nomeDe(b), "pt-BR"));
+};
+// data da última pelada que já aconteceu (o dia da semana da pelada), pra vir sugerida
+const dataSugerida = () => !app.jogo ? hoje() : app.jogo.data <= hoje() ? app.jogo.data
+  : iso(new Date(new Date(app.jogo.data + "T12:00").getTime() - 7 * 864e5));
 
 // placar sai dos gols: gol de quem é do time + gol contra do adversário
 function placarPos(j){
@@ -2552,7 +2511,7 @@ function totaisPos(){
   return t;
 }
 
-// times mudaram depois dos jogos lançados: sai o que ficou com jogador fora dos dois times do jogo
+// times mudaram depois das partidas registradas: sai o que ficou com jogador fora dos dois times da partida
 function podarJogos(){
   let fora = 0;
   state.pos.jogos.forEach(j => {
@@ -2584,7 +2543,9 @@ function previsaoCartola(){
   return `Ao salvar, a <b>rodada ${r.numero}</b> do Cartola é encerrada: pontos dos jogadores e dos times, preços e ranking da liga atualizados.`;
 }
 
-// abre o pós-pelada de uma data: continua o rascunho, corrige o que já foi salvo ou começa do zero
+const irProRegistro = () => { if (location.hash === "#pospelada") route(); else location.hash = "pospelada"; };
+
+// abre o registro de uma data: continua o rascunho, corrige o que já foi salvo ou começa do zero
 async function abrirPos(data){
   const salvo = rascunhoPos();
   if (salvo && salvo.data === data) state.pos = salvo;
@@ -2598,95 +2559,133 @@ async function abrirPos(data){
       pa ? sb.from("lances").select("confronto_id, jogador_id, metrica, qtd").eq("partida_id", pa.id).order("id") : { data: [] }
     ])).map(ok);
     const corrigindo = !!pa && pa.modo === "pos_pelada";
+    const timesSalvos = Object.fromEntries(times.filter(t => POS_TIMES.includes(t.time)).map(t => [t.jogador_id, t.time]));
     state.pos = { data, corrigindo, passo: corrigindo ? "jogos" : "times", aberto: null, todos: false, extras: [], metrica: null,
+      modoTimes: Object.keys(timesSalvos).length ? "selecionar" : null,
       substitui: !!pa && !corrigindo && [app.gols, app.lances, app.presencas].some(xs => xs.some(x => x.partida_id === pa.id)),
       confirmados: lista.filter(l => l.situacao === "confirmado").map(l => l.jogador_id),
-      // aproveita o sorteio do dia, se teve
-      times: Object.fromEntries(times.filter(t => POS_TIMES.includes(t.time)).map(t => [t.jogador_id, t.time])),
+      times: timesSalvos,   // aproveita o sorteio do dia, se teve
       jogos: corrigindo ? confrontos.map(c => ({ a: c.time_a, b: c.time_b,
         gols: gols.filter(g => g.confronto_id === c.id && g.autor_id).map(g => ({ autor: g.autor_id, assist: g.assistencia_id })),
         lances: lances.filter(l => l.confronto_id === c.id && l.metrica !== "vitorias").map(l => ({ jogador: l.jogador_id, metrica: l.metrica, qtd: l.qtd })) })) : [] };
   }
   guardarPos();
-  if (location.hash === "#pospelada") route(); else location.hash = "pospelada";
+  irProRegistro();
 }
 
 function renderPosPelada(){
   view.className = "grid solo wide";
   if (!state.pos) state.pos = rascunhoPos();
   if (!state.pos || !souPresidente()) { history.replaceState(null, "", "#pelada"); return renderPelada(); }
-  const P = state.pos, noTimes = P.passo === "times";
+  const P = state.pos;
+  if (P.passo === "data") {
+    view.innerHTML = `
+      <section class="card fade">
+        <div class="card-head" style="margin-bottom:0">
+          <div><div class="eyebrow">Registrar pelada</div><div class="h2">Qual foi a data da pelada?</div></div>
+          <a class="btn ghost sm" href="#pelada">Sair</a>
+        </div>
+        <form data-form="posData" style="margin-top:14px">
+          <label class="field" style="margin:0"><span>Data</span><input class="input" type="date" name="data" value="${dataSugerida()}" max="${hoje()}" required></label>
+          <p class="hint">Se essa data já foi registrada, ela abre pra você corrigir.</p>
+          <button class="btn block">Continuar</button>
+        </form>
+      </section>`;
+    return;
+  }
+  const noTimes = P.passo === "times";
   view.innerHTML = `
     <section class="card fade">
       <div class="card-head" style="margin-bottom:0">
-        <div><div class="eyebrow">${P.corrigindo ? "Corrigir partida" : "Pós-pelada"} · ${dataLonga(P.data)}</div>
-          <div class="h2">${noTimes ? "Separe os 4 times" : "Computar estatísticas"}</div></div>
+        <div><div class="eyebrow">${P.corrigindo ? "Corrigir pelada" : "Registrar pelada"} · ${dataLonga(P.data)}</div>
+          <div class="h2">${noTimes ? "Separar times" : "Registrar partidas"}</div></div>
         <a class="btn ghost sm" href="#pelada">Sair</a>
       </div>
       <div class="seg full" style="margin-top:14px">
-        <button class="${noTimes ? "on" : ""}" data-act="posPasso" data-passo="times">1 · Times</button>
-        <button class="${noTimes ? "" : "on"}" data-act="posPasso" data-passo="jogos">2 · Estatísticas</button>
+        <button class="${noTimes ? "on" : ""}" data-act="posPasso" data-passo="times">1 · Separar times</button>
+        <button class="${noTimes ? "" : "on"}" data-act="posPasso" data-passo="jogos">2 · Registrar partidas</button>
       </div>
-      <p class="note">${noTimes ? "Toque no colete de cada jogador que foi pra aquele time. Quem não jogou fica sem time."
-        : "Monte cada jogo da noite (quem jogou contra quem) e lance os gols e as estatísticas. Os elencos já vêm dos times que você separou."}
+      <p class="note">${noTimes ? "Sorteie os 4 times ou escolha quem jogou em cada um."
+        : "Escolha os times que se enfrentaram: os jogadores já vêm de cada time. Depois registre os gols e as estatísticas."}
         O rascunho fica salvo neste aparelho até você salvar.</p>
-      ${P.substitui ? `<p class="hint">Essa data já tem coisas lançadas ao vivo. Ao salvar, o pós-pelada substitui tudo.</p>` : ""}
+      ${P.substitui ? `<p class="hint">Essa data já tem coisas registradas. Ao salvar, o novo registro substitui tudo.</p>` : ""}
     </section>
     ${noTimes ? posPassoTimes() : posPassoJogos()}`;
 }
 
-const situacaoPos = id => timeDe(id) ? `Time ${nomeTime(timeDe(id))}` : state.pos.confirmados.includes(id) ? "Confirmado · sem time" : "Sem time";
-
 function posPassoTimes(){
-  const P = state.pos;
-  const base = P.todos ? app.membros.map(m => m.jogador_id) : [...P.confirmados, ...P.extras, ...Object.keys(P.times)];
-  const ids = [...new Set(base)].filter(membroDe).sort((a, b) => nomeDe(a).localeCompare(nomeDe(b), "pt-BR"));
+  const P = state.pos, modo = P.modoTimes, ids = candidatosPos();
   const outros = app.membros.map(m => m.jogador_id).filter(id => !ids.includes(id)).sort((a, b) => nomeDe(a).localeCompare(nomeDe(b), "pt-BR"));
-  return `
-    <section class="card fade" style="animation-delay:.04s">
-      <div class="row">${POS_TIMES.map(n => `<span class="pill soft">${colete(n)}${nomeTime(n)} · <span data-conta="${n}">${elencoPos(n).length}</span></span>`).join("")}</div>
+  const sorteados = Object.keys(P.times).length > 0;
+  const adicionar = outros.length ? `<div class="row" style="margin-top:14px">
+      <select class="input" id="posExtra" aria-label="Adicionar jogador"><option value="">Adicionar outro jogador</option>${outros.map(id => `<option value="${id}">${esc(nomeDe(id))}</option>`).join("")}</select>
+      <button class="btn ghost" data-act="posExtra">Adicionar</button>
+    </div>
+    ${P.todos ? "" : `<button class="lnk" data-act="posTodos" style="margin-top:12px;background:none">Mostrar o elenco todo</button>`}` : "";
+  const contagem = `<div class="row">${POS_TIMES.map(n => `<span class="pill soft">${seloTime(n)}${nomeTimePos(n)} · <span data-conta="${n}">${elencoPos(n).length}</span></span>`).join("")}</div>`;
+  let corpo = "";
+  if (modo === "sortear") corpo = `
+    <section class="card fade" style="animation-delay:.06s">
+      <div class="eyebrow">Sorteio equilibrado</div><div class="h2">${plural(ids.length, "jogador", "jogadores")} pra sortear</div>
+      <p class="note">Os times saem parelhos pela nota de cada um e pela posição. Quem não jogou, tire em <b>Selecionar jogadores</b>.</p>
+      ${adicionar}
+      <button class="btn ${sorteados ? "ghost " : ""}block" data-act="posSortear" ${ids.length >= POS_TIMES.length ? "" : "disabled"}>${sorteados ? "Sortear de novo" : "Sortear 4 times"}</button>
+      ${sorteados ? `<div class="elencos" style="margin-top:16px">${POS_TIMES.map(n => `<div>${seloTime(n)}<span><b>${nomeTimePos(n)}:</b> ${elencoPos(n).map(id => esc(nomeDe(id))).join(", ") || "ninguém"}</span></div>`).join("")}</div>` : ""}
+    </section>`;
+  else if (modo === "selecionar") corpo = `
+    <section class="card fade" style="animation-delay:.06s">
+      ${contagem}
       ${ids.length ? `<ul class="list" style="margin-top:8px">${ids.map(id => `
         <li class="escolha">
           ${avatarDe(id)}
           <div class="who"><b>${esc(nomeDe(id))}${(membroDe(id) || {}).posicao ? `<span class="pos-tag">${membroDe(id).posicao}</span>` : ""}</b>
             <span data-situacao>${situacaoPos(id)}</span></div>
-          <div class="seg full">${POS_TIMES.map(n => `<button class="${timeDe(id) === n ? "on" : ""}" data-act="posTime" data-id="${id}" data-time="${n}" aria-label="${esc(nomeDe(id))} no time ${nomeTime(n)}">${colete(n)}${nomeTime(n)}</button>`).join("")}</div>
+          <div class="seg full">${POS_TIMES.map(n => `<button class="${timeDe(id) === n ? "on" : ""}" data-act="posTime" data-id="${id}" data-time="${n}" aria-label="${esc(nomeDe(id))} no ${nomeTimePos(n)}">${nomeTimePos(n)}</button>`).join("")}</div>
         </li>`).join("")}</ul>`
       : `<div class="empty">Ninguém confirmou nessa data.<br>Adicione quem jogou ou mostre o elenco todo.</div>`}
-      ${outros.length ? `<div class="row" style="margin-top:14px">
-        <select class="input" id="posExtra" aria-label="Adicionar jogador"><option value="">Adicionar outro jogador</option>${outros.map(id => `<option value="${id}">${esc(nomeDe(id))}</option>`).join("")}</select>
-        <button class="btn ghost" data-act="posExtra">Adicionar</button>
-      </div>
-      ${P.todos ? "" : `<button class="lnk" data-act="posTodos" style="margin-top:12px;background:none">Mostrar o elenco todo</button>`}` : ""}
-      <button class="btn block" data-act="posCriarTimes">Criar times</button>
+      ${adicionar}
     </section>`;
+  return `
+    <section class="card fade" style="animation-delay:.04s">
+      <div class="eyebrow">Separar times</div><div class="h2">Como você quer montar?</div>
+      <div class="seg full" style="margin-top:12px">
+        <button class="${modo === "sortear" ? "on" : ""}" data-act="posModoTimes" data-valor="sortear">Sortear times</button>
+        <button class="${modo === "selecionar" ? "on" : ""}" data-act="posModoTimes" data-valor="selecionar">Selecionar jogadores</button>
+      </div>
+      ${modo ? "" : `<p class="note">Sortear monta 4 times equilibrados com os confirmados. Selecionar deixa você escolher quem jogou no Time A, B, C e D.</p>`}
+    </section>
+    ${corpo}
+    ${modo ? `<section class="card fade" style="animation-delay:.08s">
+      <button class="btn block" style="margin-top:0" data-act="posCriarTimes" id="posRegistrar" ${timesProntos() ? "" : "disabled"}>Registrar partidas</button>
+      <p class="hint" id="posFalta" style="text-align:center">${timesProntos() ? "" : "Coloque pelo menos 1 jogador em cada time."}</p>
+    </section>` : ""}`;
 }
 
 function posPassoJogos(){
   const P = state.pos;
   const jogos = n => P.jogos.filter(j => j.a === n || j.b === n).length;
   const sugestao = [...POS_TIMES].sort((a, b) => jogos(a) - jogos(b) || a - b);
-  const opcoes = sel => POS_TIMES.map(n => `<option value="${n}" ${n === sel ? "selected" : ""}>${nomeTime(n)}</option>`).join("");
+  const opcoes = sel => POS_TIMES.map(n => `<option value="${n}" ${n === sel ? "selected" : ""}>${nomeTimePos(n)}</option>`).join("");
   return `
     <section class="card fade" style="animation-delay:.04s">
       <div class="card-head" style="margin-bottom:0"><div><div class="eyebrow">Times</div><div class="h2">Quem jogou em cada um</div></div>
         <button class="btn ghost sm" data-act="posPasso" data-passo="times">Editar</button></div>
-      <div class="elencos">${POS_TIMES.map(n => `<div>${colete(n)}<span><b>${nomeTime(n)}:</b> ${elencoPos(n).map(id => esc(nomeDe(id))).join(", ")}</span></div>`).join("")}</div>
+      <div class="elencos">${POS_TIMES.map(n => `<div>${seloTime(n)}<span><b>${nomeTimePos(n)}:</b> ${elencoPos(n).map(id => esc(nomeDe(id))).join(", ")}</span></div>`).join("")}</div>
     </section>
 
     <section class="card fade" style="animation-delay:.06s">
-      <div class="eyebrow">Jogos da noite</div><div class="h2">${P.jogos.length ? plural(P.jogos.length, "jogo lançado", "jogos lançados") : "Qual time jogou contra qual?"}</div>
+      <div class="eyebrow">Partidas da noite</div><div class="h2">${P.jogos.length ? plural(P.jogos.length, "partida registrada", "partidas registradas") : "Quais times se enfrentaram?"}</div>
       ${P.jogos.length ? `<ul class="list" style="margin-top:8px">${P.jogos.map((j, i) => {
         const [a, b] = placarPos(j), est = j.lances.reduce((s, l) => s + l.qtd, 0);
-        return `<li class="click ${P.aberto === i ? "sel" : ""}" data-act="posAbrir" data-i="${i}"><span class="num ${P.aberto === i ? "lime" : ""}">${i + 1}</span>
-          <div class="who"><b>${nomeTime(j.a)} ${a} x ${b} ${nomeTime(j.b)}</b><span>${plural(j.gols.length, "gol", "gols")}${est ? ` · ${plural(est, "estatística", "estatísticas")}` : ""}</span></div>
-          <span class="pill soft">${P.aberto === i ? "Aberto" : "Editar"}</span></li>`; }).join("")}</ul>` : ""}
+        return `<li class="click" data-act="posAbrir" data-i="${i}"><span class="num ${P.aberto === i ? "lime" : ""}">${i + 1}</span>
+          <div class="who"><b>${nomeTimePos(j.a)} ${a} x ${b} ${nomeTimePos(j.b)}</b><span>${plural(j.gols.length, "gol", "gols")}${est ? ` · ${plural(est, "estatística", "estatísticas")}` : ""}</span></div>
+          <span class="pill soft">${P.aberto === i ? "Aberta" : "Editar"}</span></li>`; }).join("")}</ul>` : ""}
       <form data-form="posJogo" style="margin-top:14px">
         <div class="two">
           <label class="field" style="margin:0"><span>Time</span><select class="input" name="a">${opcoes(sugestao[0])}</select></label>
           <label class="field" style="margin:0"><span>Contra</span><select class="input" name="b">${opcoes(sugestao[1])}</select></label>
         </div>
-        <button class="btn ghost block" style="margin-top:12px">+ Adicionar jogo</button>
+        <button class="btn ghost block" style="margin-top:12px">+ Registrar partida</button>
       </form>
     </section>
 
@@ -2701,20 +2700,20 @@ function posPassoJogos(){
 
 function cardJogoPos(){
   const P = state.pos, i = P.aberto, j = jogoAberto(), [a, b] = placarPos(j), stats = posStats();
-  const grupos = `${[j.a, j.b].map(n => `<optgroup label="${nomeTime(n)}">${elencoPos(n).map(id => `<option value="${id}">${esc(nomeDe(id))}</option>`).join("")}</optgroup>`).join("")}`;
+  const grupos = `${[j.a, j.b].map(n => `<optgroup label="${nomeTimePos(n)}">${elencoPos(n).map(id => `<option value="${id}">${esc(nomeDe(id))}</option>`).join("")}</optgroup>`).join("")}`;
   const temGC = stats.some(([v]) => v === "gol_contra");
   return `
     <section class="card fade" id="jogoAberto">
       <div class="card-head" style="margin-bottom:0">
-        <div><div class="eyebrow">Jogo ${i + 1}</div><div class="h2">${nomeTime(j.a)} x ${nomeTime(j.b)}</div></div>
-        <button class="btn ghost sm" data-act="posApagarJogo" data-i="${i}">Excluir jogo</button>
+        <div><div class="eyebrow">Partida ${i + 1}</div><div class="h2">${nomeTimePos(j.a)} x ${nomeTimePos(j.b)}</div></div>
+        <button class="btn ghost sm" data-act="posApagarJogo" data-i="${i}">Excluir</button>
       </div>
       <div class="placar">
-        <div class="lado">${colete(j.a)}${nomeTime(j.a)}</div>
+        <div class="lado">${seloTime(j.a)}${nomeTimePos(j.a)}</div>
         <div><span class="gols">${a}</span> <span class="x">x</span> <span class="gols">${b}</span></div>
-        <div class="lado">${colete(j.b)}${nomeTime(j.b)}</div>
+        <div class="lado">${seloTime(j.b)}${nomeTimePos(j.b)}</div>
       </div>
-      <p class="hint" style="text-align:center">O placar sai dos gols lançados${temGC ? " (gol contra conta pro adversário)" : ""}.</p>
+      <p class="hint" style="text-align:center">O placar sai dos gols registrados${temGC ? " (gol contra conta pro adversário)" : ""}.</p>
 
       <div class="sub-title">Gols (${j.gols.length})</div>
       <form data-form="posGol" class="row">
@@ -2724,7 +2723,7 @@ function cardJogoPos(){
       </form>
       ${j.gols.length ? `<ul class="list" style="margin-top:6px">${j.gols.map((g, k) => `
         <li>${avatarDe(g.autor)}
-          <div class="who"><b>⚽ ${esc(nomeDe(g.autor))}</b><span>${colete(timeDe(g.autor))} ${nomeTime(timeDe(g.autor))}${posAssist() ? ` · ${g.assist ? `🎯 ${esc(nomeDe(g.assist))}` : "sem assistência"}` : ""}</span></div>
+          <div class="who"><b>⚽ ${esc(nomeDe(g.autor))}</b><span>${nomeTimePos(timeDe(g.autor))}${posAssist() ? ` · ${g.assist ? `🎯 ${esc(nomeDe(g.assist))}` : "sem assistência"}` : ""}</span></div>
           <button class="btn ghost sm" data-act="posApagarGol" data-g="${k}">Remover</button></li>`).join("")}</ul>` : ""}
 
       ${stats.length ? `
@@ -2738,21 +2737,8 @@ function cardJogoPos(){
           <li>${avatarDe(l.jogador)}
             <div class="who"><b>${esc(nomeDe(l.jogador))}</b><span>${esc(nomeLance(l.metrica))} × ${l.qtd}</span></div>
             <button class="btn ghost sm" data-act="posMenosLance" data-l="${k}">−1</button></li>`).join("")}</ul>` : ""}` : ""}
-      <button class="btn block" data-act="posFechar">Jogo ${i + 1} pronto</button>
+      <button class="btn block" data-act="posFechar">Partida ${i + 1} pronta</button>
     </section>`;
-}
-
-function corpoModoPartida(){
-  const pa = app.partidas.find(x => x.data === state.novaData);
-  const opt = (act, titulo, desc) => `<div class="opt" data-act="${act}"><div class="opt-head"><span class="radio"></span><div><b>${titulo}</b><span>${desc}</span></div></div></div>`;
-  return `<button class="x" data-act="fecharModal" aria-label="Fechar">×</button>
-    <div class="eyebrow">Nova partida · ${dataLonga(state.novaData)}</div>
-    <div class="h2">Como você vai anotar?</div>
-    <div style="margin-top:14px">
-      ${opt("modoAoVivo", "Ao vivo", "Durante a pelada: coloque os jogos em campo e marque o placar na aba Times da noite. Gols e estatísticas ficam no card Partidas.")}
-      ${opt("modoPos", "Pós-pelada", "A pelada já acabou: separe os 4 times, diga quem jogou contra quem e lance placar, gols e estatísticas de cada jogo.")}
-    </div>
-    ${pa ? `<p class="hint" style="margin-top:12px">Já existe uma partida nessa data. Ao vivo continua nela; o pós-pelada substitui o que foi lançado quando você salvar.</p>` : ""}`;
 }
 
 function corpoResumoPos(){
@@ -2760,22 +2746,22 @@ function corpoResumoPos(){
   const jogaram = POS_TIMES.flatMap(elencoPos);
   return `<button class="x" data-act="fecharModal" aria-label="Fechar">×</button>
     <div class="eyebrow">Confira antes de salvar</div>
-    <div class="h2">${P.corrigindo ? "Correção" : "Pós-pelada"} de ${dataLonga(P.data)}</div>
-    <div class="lista-sub">Jogos <span>${plural(P.jogos.length, "jogo", "jogos")}</span></div>
+    <div class="h2">${P.corrigindo ? "Correção da pelada" : "Pelada"} de ${dataLonga(P.data)}</div>
+    <div class="lista-sub">Partidas <span>${plural(P.jogos.length, "partida", "partidas")}</span></div>
     <ul class="list">${P.jogos.map((j, i) => {
       const [a, b] = placarPos(j);
       const autores = [...j.gols.map(g => esc(nomeDe(g.autor))),
         ...j.lances.filter(l => l.metrica === "gol_contra").map(l => `${esc(nomeDe(l.jogador))} (contra${l.qtd > 1 ? ` ×${l.qtd}` : ""})`)];
       return `
-      <li><span class="num">${i + 1}</span><div class="who"><b>${nomeTime(j.a)} ${a} x ${b} ${nomeTime(j.b)}</b>
+      <li><span class="num">${i + 1}</span><div class="who"><b>${nomeTimePos(j.a)} ${a} x ${b} ${nomeTimePos(j.b)}</b>
         <span>${autores.length ? autores.join(", ") : "Sem gols"}</span></div></li>`; }).join("")}</ul>
     <div class="lista-sub">Por jogador <span>${plural(jogaram.length, "jogou", "jogaram")}</span></div>
     <ul class="list">${jogaram.map(id => { const o = totais.get(id) || {}; return `
       <li>${avatarDe(id)}<div class="who"><b>${esc(nomeDe(id))}</b>
         <span>${Object.keys(o).length ? Object.entries(o).map(([k, n]) => `${esc(nomeStat(k))} ${n}`).join(" · ") : "Sem estatísticas"}</span></div>
-        ${colete(timeDe(id))}</li>`; }).join("")}</ul>
+        ${seloTime(timeDe(id))}</li>`; }).join("")}</ul>
     <div class="prazo off"><div>${previsaoCartola()}</div></div>
-    ${P.substitui ? `<p class="hint">O que foi lançado ao vivo nessa data é substituído.</p>` : ""}
+    ${P.substitui ? `<p class="hint">O que já estava registrado nessa data é substituído.</p>` : ""}
     <div class="dois"><button class="btn ghost" data-act="fecharModal">Corrigir</button><button class="btn" data-act="posSalvar">Salvar e atualizar</button></div>`;
 }
 
@@ -3134,20 +3120,10 @@ const ACOES = {
     await carregarLista();
     route(true);
   }),
-  apagarGol: el => run(async () => { ok(await sb.from("gols").delete().eq("id", el.dataset.id)); await recarregar(); }),
 
-  // nova partida: ao vivo (como sempre foi) ou pós-pelada
-  modoAoVivo: () => run(async () => {
-    const data = state.novaData;
-    const nova = app.partidas.find(p => p.data === data)
-      || ok(await sb.from("partidas").insert({ pelada_id: app.pelada.id, data }).select("id").single());
-    state.modal = null;
-    renderModal();
-    await carregar();
-    state.partida = nova.id;
-    route();
-  }),
-  modoPos: () => run(async () => { state.modal = null; renderModal(); await abrirPos(state.novaData); }),
+  // registrar pelada: data → separar times → registrar partidas
+  registrarPelada: () => { state.pos = { passo: "data" }; irProRegistro(); },
+  verPartidas: () => { state.verPartidas = !state.verPartidas; route(true); },
   posCorrigir: el => run(() => abrirPos(el.dataset.data)),
   posContinuar: () => run(() => abrirPos(rascunhoPos().data)),
   posDescartar: () => { state.pos = null; guardarPos(); route(true); aviso("Rascunho descartado"); },
@@ -3160,6 +3136,17 @@ const ACOES = {
     li.querySelectorAll('[data-act="posTime"]').forEach(b => b.classList.toggle("on", Number(b.dataset.time) === timeDe(id)));
     li.querySelector("[data-situacao]").textContent = situacaoPos(id);
     POS_TIMES.forEach(t => { const c = view.querySelector(`[data-conta="${t}"]`); if (c) c.textContent = elencoPos(t).length; });
+    document.getElementById("posRegistrar").disabled = !timesProntos();
+    document.getElementById("posFalta").textContent = timesProntos() ? "" : "Coloque pelo menos 1 jogador em cada time.";
+  },
+  posModoTimes: el => { state.pos.modoTimes = el.dataset.valor; guardarPos(); route(true); },
+  posSortear: () => {
+    const ids = candidatosPos();
+    if (ids.length < POS_TIMES.length) return aviso("Precisa de pelo menos 4 jogadores pra sortear.");
+    state.pos.times = {};
+    sortearTimes(ids, POS_TIMES.length).forEach((grupo, i) => grupo.forEach(id => { state.pos.times[id] = i + 1; }));
+    guardarPos(); route(true);
+    aviso("Times sorteados e equilibrados!");
   },
   posExtra: () => {
     const id = (document.getElementById("posExtra") || {}).value;
@@ -3170,11 +3157,11 @@ const ACOES = {
   posTodos: () => { state.pos.todos = true; guardarPos(); route(true); },
   posCriarTimes: () => {
     const vazio = POS_TIMES.find(n => !elencoPos(n).length);
-    if (vazio) return aviso(`O time ${nomeTime(vazio)} está sem jogador.`);
+    if (vazio) return aviso(`O ${nomeTimePos(vazio)} está sem jogador.`);
     const fora = podarJogos(), primeira = !state.pos.jogos.length;
     state.pos.passo = "jogos";
     guardarPos(); route();
-    aviso(fora ? `Times salvos. ${plural(fora, "lance saiu", "lances saíram")} porque o jogador mudou de time.` : primeira ? "Times criados! Agora lance os jogos." : "Times salvos");
+    aviso(fora ? `Times salvos. ${plural(fora, "lance saiu", "lances saíram")} porque o jogador mudou de time.` : primeira ? "Times prontos! Agora registre as partidas." : "Times salvos");
   },
   posPasso: el => {
     if (el.dataset.passo === "jogos") { if (state.pos.passo !== "jogos") ACOES.posCriarTimes(); return; }
@@ -3191,7 +3178,7 @@ const ACOES = {
     state.pos.jogos.splice(Number(el.dataset.i), 1);
     state.pos.aberto = null;
     guardarPos(); route(true);
-    aviso("Jogo excluído");
+    aviso("Partida excluída");
   },
   posApagarGol: el => { jogoAberto().gols.splice(Number(el.dataset.g), 1); guardarPos(); route(true); },
   posMenosLance: el => {
@@ -3200,7 +3187,7 @@ const ACOES = {
     guardarPos(); route(true);
   },
   posConferir: () => {
-    if (!state.pos.jogos.length) return aviso("Lance pelo menos um jogo.");
+    if (!state.pos.jogos.length) return aviso("Registre pelo menos uma partida.");
     state.modal = "resumoPos";
     renderModal();
   },
@@ -3216,15 +3203,9 @@ const ACOES = {
     state.pos = null; guardarPos();
     state.modal = null; renderModal();
     await carregar();
-    state.partida = r.partida;
     if (location.hash === "#pelada") route(); else location.hash = "pelada";
-    aviso(`Partida salva e rankings atualizados.${r.cartola === "encerrada" ? ` Rodada ${r.rodada} do Cartola encerrada.`
+    aviso(`Pelada salva e rankings atualizados.${r.cartola === "encerrada" ? ` Rodada ${r.rodada} do Cartola encerrada.`
       : r.cartola === "recalculada" ? ` Rodada ${r.rodada} do Cartola recalculada.` : ""}`);
-  }),
-  apagarLance: el => run(async () => {
-    const q = Number(el.dataset.qtd);
-    ok(q > 1 ? await sb.from("lances").update({ qtd: q - 1 }).eq("id", el.dataset.id) : await sb.from("lances").delete().eq("id", el.dataset.id));
-    await recarregar();
   }),
   metodo: el => run(async () => { if (app.pelada.metodo !== el.dataset.valor) { await salvarPelada({ metodo: el.dataset.valor }); route(); } }),
   janela: el => run(async () => { await salvarPelada({ janela_semanas: Number(el.dataset.valor) }); route(); }),
@@ -3355,13 +3336,6 @@ async function mudarMembro(jogador, campos){
 }
 
 const MUDANCAS = {
-  selPartida: el => { state.partida = el.value; route(); },
-  presenca: el => run(async () => {
-    const linha = { pelada_id: app.pelada.id, partida_id: state.partida, jogador_id: el.dataset.jogador };
-    if (el.checked) ok(await sb.from("presencas").insert(linha));
-    else ok(await sb.from("presencas").delete().eq("partida_id", linha.partida_id).eq("jogador_id", linha.jogador_id));
-    await recarregar();
-  }),
   peso: el => run(async () => { await salvarPelada({ peso_votacao: Number(el.value) }); }),
   mercOrdem: el => { state.mercOrdem = el.value; renderListaMerc(); },
   pontRodada: el => { state.pontRodada = el.value; route(true); },
@@ -3518,13 +3492,7 @@ const FORMS = {
     aviso(`Em campo: ${nomeTime(a)} x ${nomeTime(b)}`);
     route(true);
   }),
-  novaPartida: (f, d) => run(async () => {
-    const data = d.get("data"), pa = app.partidas.find(p => p.data === data);
-    if (pa && pa.modo === "pos_pelada") return abrirPos(data);   // já foi lançada no pós-pelada: abre pra corrigir
-    state.novaData = data;
-    state.modal = "modoPartida";
-    renderModal();
-  }),
+  posData: (f, d) => run(() => abrirPos(d.get("data"))),
   posJogo: (f, d) => {
     const a = Number(d.get("a")), b = Number(d.get("b"));
     if (a === b) return aviso("Escolha dois times diferentes.");
@@ -3546,20 +3514,6 @@ const FORMS = {
     state.pos.metrica = metrica;
     guardarPos(); route(true);
   },
-  novoGol: (f, d) => run(async () => {
-    ok(await sb.from("gols").insert({
-      pelada_id: app.pelada.id, partida_id: state.partida,
-      autor_id: d.get("autor"), assistencia_id: d.get("assist") || null
-    }));
-    await recarregar();
-  }),
-  novoLance: (f, d) => run(async () => {
-    const jogador = d.get("jogador"), metrica = d.get("metrica");
-    const existe = app.lances.find(l => l.partida_id === state.partida && l.jogador_id === jogador && l.metrica === metrica);
-    ok(existe ? await sb.from("lances").update({ qtd: existe.qtd + 1 }).eq("id", existe.id)
-      : await sb.from("lances").insert({ pelada_id: app.pelada.id, partida_id: state.partida, jogador_id: jogador, metrica }));
-    await recarregar();
-  }),
   cartNome: (f, d) => run(async () => {
     ok(await sb.rpc("cartola_renomear", { p: app.pelada.id, nome_: d.get("nome") }));
     state.renomear = false;
