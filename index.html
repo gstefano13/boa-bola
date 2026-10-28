@@ -40,6 +40,15 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .brand svg{width:24px;height:24px;flex:none;position:relative;top:.12em} /* centro na altura das minúsculas */
 .me-chip{display:flex;align-items:center;gap:10px;background:var(--card);border-radius:999px;padding:4px 12px 4px 4px;font-size:14px;font-weight:500;box-shadow:var(--shadow);color:inherit;text-decoration:none}
 .me-chip:empty{display:none}
+.me-wrap{position:relative}
+.menu-perfil{display:none;position:absolute;right:0;top:calc(100% + 8px);z-index:35;min-width:220px;max-width:calc(100vw - 32px);background:var(--card);border-radius:16px;padding:6px;box-shadow:0 14px 34px -12px rgba(0,0,0,.35);animation:sobe .18s ease both}
+.menu-perfil.on{display:block}
+.menu-perfil .quem{padding:8px 12px 10px;border-bottom:1px solid var(--line);margin-bottom:4px;min-width:0}
+.menu-perfil .quem b{display:block;font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.menu-perfil .quem span{display:block;font-size:12px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.menu-perfil button{display:block;width:100%;text-align:left;padding:11px 12px;border-radius:10px;font-size:14px;font-weight:500;color:var(--ink)}
+.menu-perfil button:hover{background:var(--soft)}
+.menu-perfil button.sair{color:#B42318}
 .av{width:32px;height:32px;border-radius:50%;background:var(--lime-soft);color:var(--ink);display:grid;place-items:center;font-size:12px;font-weight:600;flex:none;overflow:hidden}
 .av img{width:100%;height:100%;object-fit:cover}
 .av.off{background:var(--soft);color:var(--ink-3)}
@@ -380,7 +389,10 @@ button.pill{font:inherit;font-size:12.5px;font-weight:500;border:0;cursor:pointe
 <div class="wrap">
   <header class="top">
     <div class="brand"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#B5F23D"/><path fill="#0E0E0E" d="M11.1 17.085C10.44 17.085 9.85796 16.971 9.35396 16.743C8.86196 16.503 8.47796 16.179 8.20196 15.771C7.92596 15.351 7.78796 14.859 7.78796 14.295C7.78796 13.767 7.90196 13.293 8.12996 12.873C8.36996 12.453 8.73596 12.099 9.22796 11.811C9.71996 11.523 10.338 11.319 11.082 11.199L14.466 10.641V12.243L11.478 12.765C10.938 12.861 10.542 13.035 10.29 13.287C10.038 13.527 9.91196 13.839 9.91196 14.223C9.91196 14.595 10.05 14.901 10.326 15.141C10.614 15.369 10.98 15.483 11.424 15.483C11.976 15.483 12.456 15.363 12.864 15.123C13.284 14.883 13.608 14.565 13.836 14.169C14.064 13.761 14.178 13.311 14.178 12.819V10.317C14.178 9.837 13.998 9.447 13.638 9.147C13.29 8.835 12.822 8.679 12.234 8.679C11.694 8.679 11.22 8.823 10.812 9.111C10.416 9.387 10.122 9.747 9.92996 10.191L8.23796 9.345C8.41796 8.865 8.71196 8.445 9.11996 8.085C9.52796 7.713 10.002 7.425 10.542 7.221C11.094 7.017 11.676 6.915 12.288 6.915C13.056 6.915 13.734 7.059 14.322 7.347C14.922 7.635 15.384 8.037 15.708 8.553C16.044 9.057 16.212 9.645 16.212 10.317V16.869H14.268V15.105L14.682 15.159C14.454 15.555 14.16 15.897 13.8 16.185C13.452 16.473 13.05 16.695 12.594 16.851C12.15 17.007 11.652 17.085 11.1 17.085Z"/></svg>anotou</div>
-    <a class="me-chip" id="meChip" href="#pelada"></a>
+    <div class="me-wrap">
+      <a class="me-chip" id="meChip" href="#pelada" data-act="menuPerfil" aria-haspopup="menu" aria-expanded="false"></a>
+      <div class="menu-perfil" id="menuPerfil" role="menu"></div>
+    </div>
   </header>
 
   <main class="grid" id="view">
@@ -417,7 +429,7 @@ const state = { periodo: "mes", stat: "gols", login: "codigo", loginEmail: "", l
   busca: "", filtro: "todas", verTodas: false, novaPelada: false, buscaUsu: "",
   buscaJog: "", filtroJog: "todos", verTodosJog: false, editando: null, addJogador: false, editMetrica: null,
   mercPos: "todos", mercBusca: "", mercOrdem: "media", mercTodos: false, pontRodada: null, faq: 0, renomear: false,
-  capitao: null, capitaoRodada: undefined, confirmEncerrar: false, editScout: null, ajustesAbertos: false, editarTime: false, formTime: null, modal: null, modalVisto: false, pos: null, verPartidas: false, votosVistos: new Set(), guiaPasso: 0, votarIds: [], troca: null };
+  capitao: null, capitaoRodada: undefined, confirmEncerrar: false, editScout: null, ajustesAbertos: false, editarTime: false, formTime: null, modal: null, modalVisto: false, pos: null, verPartidas: false, menuPerfil: false, votosVistos: new Set(), guiaPasso: 0, votarIds: [], troca: null };
 
 /* ===================== REGRAS ===================== */
 const CHUTEIRAS = [
@@ -736,12 +748,29 @@ function rankingGlobal(periodo){
   }));
 }
 
+/* ===================== MENU DO PERFIL =====================
+   Toque no nome lá em cima: atalhos da conta e sair. */
+function renderMenuPerfil(){
+  const el = document.getElementById("menuPerfil"), aberto = state.menuPerfil && !!app.perfil;
+  document.getElementById("meChip").setAttribute("aria-expanded", String(aberto));
+  el.classList.toggle("on", aberto);
+  if (!aberto) { el.innerHTML = ""; return; }
+  el.innerHTML = `
+    <div class="quem"><b>${esc(app.perfil.nome || nomeExibido())}</b><span>${esc(app.user.email || "")}</span></div>
+    ${app.modoDev ? `<button role="menuitem" data-act="irPara" data-hash="ajustes">Ajustes</button>`
+      : app.pelada ? `<button role="menuitem" data-act="irPara" data-hash="pelada">Minha pelada</button>` : ""}
+    ${!app.modoDev && (app.peladas.length > 1 || app.dev) ? `<button role="menuitem" data-act="trocar">Trocar de pelada</button>` : ""}
+    ${app.dev && !app.modoDev ? `<button role="menuitem" data-act="painel">Painel do dev</button>` : ""}
+    <button class="sair" role="menuitem" data-act="sair">Sair da conta</button>`;
+}
+
 /* ===================== ROTAS ===================== */
 function route(manterScroll){
   const y = window.scrollY;
   const chip = document.getElementById("meChip");
   chip.innerHTML = app.perfil ? `${avatar(app.perfil.nome, app.perfil.foto_url)}${esc(nomeExibido())}` : "";
   chip.href = app.modoDev ? "#ajustes" : "#pelada";
+  renderMenuPerfil();
   view.className = "grid";
   let itens = [], v;
   if (!app.user) renderLogin();
@@ -3046,6 +3075,8 @@ const ACOES = {
   trocar: () => run(async () => { app.pelada = null; gravar("pelada", null); await carregarPeladas(); route(); }),
   painel: () => run(async () => { app.modoDev = true; app.pelada = null; await carregarTodas(); location.hash = "peladas"; route(); }),
   sair: () => run(async () => { ok(await sb.auth.signOut()); }),
+  menuPerfil: () => { state.menuPerfil = !state.menuPerfil; renderMenuPerfil(); },
+  irPara: el => { location.hash = el.dataset.hash; },
   copiar: () => run(async () => { await navigator.clipboard.writeText(linkConvite()); aviso("Link de convite copiado!"); }),
   novoCodigo: () => run(async () => {
     const c = ok(await sb.rpc("novo_codigo", { p: app.pelada.id }));
@@ -3635,8 +3666,11 @@ const FORMS = {
 
 document.addEventListener("click", e => {
   const el = e.target.closest("[data-act]");
+  // menu do perfil aberto: qualquer toque fora do nome fecha (inclusive escolher uma opção dele)
+  if (state.menuPerfil && (!el || el.id !== "meChip")) { state.menuPerfil = false; renderMenuPerfil(); }
   if (el && ACOES[el.dataset.act]) { e.preventDefault(); ACOES[el.dataset.act](el); }
 });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && state.menuPerfil) { state.menuPerfil = false; renderMenuPerfil(); } });
 document.addEventListener("change", e => {
   const el = e.target.closest("[data-change]");
   if (el && MUDANCAS[el.dataset.change]) MUDANCAS[el.dataset.change](el);
