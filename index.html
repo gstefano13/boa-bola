@@ -222,6 +222,8 @@ button.pill{font:inherit;font-size:12.5px;font-weight:500;border:0;cursor:pointe
 .btn.block{width:100%;margin-top:18px;padding:15px 18px;font-size:15px;white-space:normal;text-align:center}
 .dois .btn{white-space:normal;text-align:center}
 .btn.ghost{background:var(--soft);color:var(--ink);border:1px solid var(--line)}
+.btn.verde{background:var(--lime);color:var(--ink);font-weight:600}
+.btn.verde:disabled{opacity:.5}
 .btn.white{background:#fff;color:var(--ink);border:1px solid var(--line)}
 .btn.sm{padding:7px 12px;font-size:13px}
 .btn:disabled{opacity:.5;cursor:default}
@@ -2959,7 +2961,8 @@ function posPassoJogos(){
     <section class="card fade" style="animation-delay:.1s">
       <div class="eyebrow">Pronto?</div><div class="h2">Conferir e salvar</div>
       <p class="note">Antes de salvar aparece um resumo com tudo pra você conferir.${posVitoria() ? " A vitória de cada jogador sai sozinha do placar." : ""}</p>
-      <button class="btn block" data-act="posConferir" ${P.jogos.length ? "" : "disabled"}>Conferir resumo</button>
+      <button class="btn block verde" data-act="posConferir" ${P.jogos.length ? "" : "disabled"}>Computar pelada</button>
+      ${avisoComputar()}
     </section>`;
 }
 
@@ -3030,8 +3033,11 @@ function corpoResumoPos(){
         ${seloTime(timeDe(id))}</li>`; }).join("")}</ul>
     <div class="prazo off"><div>${previsaoCartola()}</div></div>
     ${P.substitui ? `<p class="hint">O que já estava registrado nessa data é substituído.</p>` : ""}
-    <div class="dois"><button class="btn ghost" data-act="fecharModal">Corrigir</button><button class="btn" data-act="posSalvar">Salvar e atualizar</button></div>`;
+    <div class="dois"><button class="btn ghost" data-act="fecharModal">Corrigir</button><button class="btn verde" data-act="posSalvar">Computar pelada</button></div>
+    ${avisoComputar()}`;
 }
+const avisoComputar = () => app.pelada.cartola_ativo
+  ? `<p class="hint" style="text-align:center">Para que o Cartola funcione bem na semana que vem, é necessário que você sempre finalize os lançamentos das estatísticas.</p>` : "";
 
 function renderCardJogadores(){
   const el = document.getElementById("cardJog");
