@@ -1456,17 +1456,46 @@ function cardTabelaLiga(rod, titulo = "Classificação"){
       <div class="eyebrow">${esc(nomeLiga())}</div><div class="h2">${titulo}</div>
       ${tabela.length ? `<ul class="rank" style="margin-top:10px">
         ${tabela.map((x, i) => `
-          <li class="${i < 3 ? "top" : ""} ${x.jogador_id === app.user.id ? "me" : ""}">
+          <li class="${i < 3 ? "top" : ""} ${x.jogador_id === app.user.id ? "me" : ""}" data-act="verTimeAmigo" data-id="${x.jogador_id}" style="cursor:pointer">
             <span class="pos">${i + 1}</span>
             ${escudoSvg(x.escudo || escudoPadrao(x.nome), 34)}
             <div class="who"><b>${esc(x.nome)}</b><span>${esc(nomeDe(x.jogador_id))}${x.jogador_id === app.user.id ? " · você" : ""}${rod ? ` · rodada ${pts(pontosDoTime(rod.id, x.jogador_id) || 0)}` : ""}</span></div>
             <span class="val">${pts(x.total)}</span>
           </li>`).join("")}
       </ul>
+      <p class="hint">Toque num time para ver a escalação. Os times dos outros só aparecem depois que o mercado fecha.</p>
       <div class="foot"><span>Pontos somados de todas as rodadas</span><span>${plural(encerradas().length, "rodada", "rodadas")}</span></div>`
       : `<div class="empty">Nenhum time na liga ainda.<br>Cada time aparece quando o jogador abre a aba Cartola.</div>`}
     </section>`;
 }
+// time de outro jogador: só depois que o mercado fecha (o banco também só libera a partir daí)
+const timesVisiveis = () => { const r = rodadaAberta(); return !r || (new Date() >= new Date(r.fecha_em) && !mercadoAberto()); };
+function corpoTimeAmigo(){
+  const dono = state.timeAmigo, t = cart().times.find(x => x.jogador_id === dono) || { nome: "Time", jogador_id: dono };
+  const fechar = `<button class="x" data-act="fecharModal" aria-label="Fechar">×</button>`;
+  const topo = `<div class="row" style="flex-wrap:nowrap;margin:6px 0 4px">${escudoSvg(t.escudo || escudoPadrao(t.nome), 40)}
+    <div class="who"><b>${esc(t.nome)}</b><span>${esc(nomeDe(dono))}</span></div></div>`;
+  if (dono !== app.user.id && !timesVisiveis()) return `${fechar}
+    <div class="eyebrow">Mercado aberto</div><div class="h2">Escalação secreta</div>${topo}
+    <p class="note" style="margin-top:10px">O time dos outros jogadores só fica visível depois que o mercado fechar, 1 hora antes da pelada. Volta aqui depois pra resenha!</p>
+    <button class="btn block" data-act="fecharModal">Entendi</button>`;
+  const r = rodadaAberta() || ultimaEncerrada();
+  if (!r) return `${fechar}<div class="h2">${esc(t.nome)}</div><div class="empty">Nenhuma rodada ainda.</div>`;
+  const esc_ = escalacaoDe(r.id, dono), encerrada = r.status === "encerrada";
+  const linhas = ["ATA", "MEI", "ZAG"].map(pos => {
+    const l = esc_.filter(e => e.posicao === pos);
+    return l.length ? `<div class="lista-sub">${pos}</div><ul class="list">${l.map(e => { const res = encerrada && resultado(r.id, e.atleta_id); return `
+      <li>${avatarDe(e.atleta_id)}<div class="who"><b>${esc(nomeDe(e.atleta_id))}${e.capitao ? ` <span class="pill lime" style="padding:2px 8px;font-size:11.5px">C ×1,5</span>` : ""}</b>
+        <span>${res ? `${pts(Number(res.pontos) * (e.capitao ? CAPITAO : 1))} pts` : `C$ ${cs(Number(e.preco_compra || precoDe(e.atleta_id)))}`}</span></div></li>`; }).join("")}</ul>` : "";
+  }).join("");
+  const total = encerrada ? pontosDoTime(r.id, dono) : null;
+  return `${fechar}
+    <div class="eyebrow">Rodada ${r.numero}${encerrada ? " · encerrada" : " · mercado fechado"}</div><div class="h2">Escalação</div>${topo}
+    ${esc_.length ? linhas : `<div class="empty">Esse time não escalou ninguém nessa rodada.</div>`}
+    ${total != null ? `<p class="note" style="margin-top:10px"><b>${pts(total)} pontos</b> na rodada</p>` : ""}
+    <button class="btn block" data-act="fecharModal">Fechar</button>`;
+}
+
 function renderLiga(){
   view.className = "grid solo wide";
   const tabela = liga(), ult = ultimaEncerrada(), lider = tabela[0];
@@ -1510,6 +1539,7 @@ function renderCartola(){
     state.capitao = (escalados.find(e => e.capitao) || {}).atleta_id || null;
     state.capitaoRodada = r && r.id;
   }
+  const temCapitao = !!state.capitao && escalados.some(e => e.atleta_id === state.capitao);
   const vaga = (pos_, e) => e ? `
       <button class="slot" data-act="cartCapitao" data-id="${e.atleta_id}" ${aberto ? "" : "disabled"} aria-label="Fazer ${esc(nomeDe(e.atleta_id))} capitão">
         <span class="bola">${esc(iniciais(membroDe(e.atleta_id) ? membroDe(e.atleta_id).jogadores.nome : "?"))}${state.capitao === e.atleta_id ? "<i>C</i>" : ""}${duvida(e.atleta_id) ? `<i class="duvida" title="Dúvida: está na lista de espera">?</i>` : ""}</span>
@@ -1557,8 +1587,9 @@ function renderCartola(){
       </div>
       <div class="dois">
         <a class="btn ghost" href="#mercado">Ver mercado</a>
-        <button class="btn" data-act="cartSalvar" ${aberto ? "" : "disabled"}>Salvar time</button>
+        <button class="btn" data-act="cartSalvar" ${aberto && temCapitao ? "" : "disabled"}>Salvar time</button>
       </div>
+      ${aberto && escalados.length && !temCapitao ? `<p class="hint" style="text-align:center"><b>Escolha o capitão para salvar o time:</b> toque num jogador do campo.</p>` : ""}
     </section>`;
 }
 
@@ -2195,6 +2226,7 @@ function renderModal(){
   const el = document.getElementById("modal");
   const t = state.modal, j = app.jogo;
   if (t === "guia") { el.innerHTML = `<div class="sheet" data-act="nada" role="dialog" aria-modal="true" aria-label="Como funciona o Anotou">${corpoGuia()}</div>`; return; }
+  if (t === "timeAmigo") { el.innerHTML = `<div class="sheet" data-act="nada" role="dialog" aria-modal="true">${corpoTimeAmigo()}</div>`; return; }
   if (t === "resumoPos") {
     el.innerHTML = `<div class="sheet" data-act="nada" role="dialog" aria-modal="true">${corpoResumoPos()}</div>`;
     return;
@@ -3783,7 +3815,9 @@ const ACOES = {
     aviso(`${nomeDe(el.dataset.id)} vendido`);
   }),
   cartCapitao: el => { state.capitao = el.dataset.id; route(true); },
+  verTimeAmigo: el => { state.timeAmigo = el.dataset.id; state.modal = "timeAmigo"; renderModal(); },
   cartSalvar: () => run(async () => {
+    if (!state.capitao || !meuEscalado().some(e => e.atleta_id === state.capitao)) { aviso("Escolha o capitão antes de salvar o time"); return; }
     const atual = (meuEscalado().find(e => e.capitao) || {}).atleta_id || null;
     if (state.capitao && state.capitao !== atual) {
       ok(await sb.rpc("cartola_capitao", { p: app.pelada.id, atleta: state.capitao }));
