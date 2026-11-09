@@ -1304,10 +1304,14 @@ async function carregarCartola(){
 
 const cart = () => app.cartola || { regras: [], rodadas: [], times: [], escalacoes: [], scouts: [], resultados: [], pontosTime: [], meuTime: null };
 const rodadaAberta = () => [...cart().rodadas].reverse().find(r => r.status === "aberta") || null;
-// mercado abre à 0h do dia da pelada e fecha 1h antes do jogo (regra no banco, migração 017)
-const mercadoAbreEm = () => app.jogo ? new Date(`${app.jogo.data}T00:00:00-03:00`) : null;
-const mercadoFechaEm = () => app.jogo ? new Date(new Date(app.jogo.inicio) - 36e5) : null;
-const mercadoAberto = () => { const r = rodadaAberta(), a = mercadoAbreEm(), agora = new Date(); return !!r && !!a && agora >= a && agora < mercadoFechaEm(); };
+// mercado fica aberto da abertura da rodada até 1h antes da pelada (regra no banco: cartola_mercado).
+// depois disso só reabre quando o presidente encerra a rodada
+const mercadoFechaEm = () => {
+  const r = rodadaAberta(); if (!r) return null;
+  const f = new Date(r.fecha_em), j = app.jogo ? new Date(new Date(app.jogo.inicio) - 36e5) : null;
+  return j && j < f ? j : f;
+};
+const mercadoAberto = () => { const f = mercadoFechaEm(); return !!app.jogo && !!f && new Date() < f; };
 const encerradas = () => cart().rodadas.filter(r => r.status === "encerrada");
 const ultimaEncerrada = () => encerradas().slice(-1)[0] || null;
 const escalacaoDe = (rodadaId, dono = app.user.id) => cart().escalacoes.filter(e => e.rodada_id === rodadaId && e.jogador_id === dono);
@@ -1339,8 +1343,7 @@ function textoMercado(){
   if (!r) return "O presidente ainda não abriu a rodada";
   if (!app.jogo) return "Defina o dia da pelada para abrir o mercado";
   if (mercadoAberto()) return `Mercado fecha 1h antes da pelada · faltam ${faltaTempo(mercadoFechaEm())}`;
-  if (new Date() < mercadoAbreEm()) return `Mercado abre ${momento(mercadoAbreEm())} · faltam ${faltaTempo(mercadoAbreEm())}`;
-  return "Mercado fechado · os pontos saem quando o presidente lançar as estatísticas";
+  return "Mercado fechado · reabre quando o presidente lançar as estatísticas";
 }
 function statusRodada(){
   const r = rodadaAberta();
@@ -1793,7 +1796,7 @@ function renderRegras(){
   const passos = [
     ["Escale 6 jogadores", "Zagueiros, meias e atacantes, numa das 4 formações: 2-2-2 (equilibrado), 3-2-1 (defensivo), 2-1-3 (ofensivo) ou 2-3-1 (meio forte). Tudo dentro do seu saldo de cartoletas."],
     ["Escolha o capitão", "A pontuação dele vale 1,5×. Dá pra trocar até o mercado fechar."],
-    ["Mercado só no dia da pelada", "Abre à 0h do dia do jogo e fecha 1 hora antes da pelada. Dá pra escalar quem confirmou presença e quem está na lista de espera."],
+    ["Mercado fecha 1h antes da pelada", "Fica aberto a semana toda e fecha 1 hora antes do jogo. Dá pra escalar quem confirmou presença e quem está na lista de espera."],
     ["Cuidado com as dúvidas", "Quem está na lista de espera aparece como dúvida: pode subir pra lista e jogar, ou ficar de fora. Se não jogar, faz 0 ponto. Escalar ou não é estratégia sua."],
     ["Pontos depois do jogo", "Os pontos só contam quando o presidente sobe as estatísticas: gols, assistências, placares da noite e cartões."],
     ["Preços se atualizam", "Quem joga bem valoriza, quem joga mal desvaloriza. Seu patrimônio acompanha."]
@@ -1802,7 +1805,7 @@ function renderRegras(){
     ${heroCartola({
       status: "Cartola da pelada", titulo: "Regras e scouts", sub: "Como funciona a pontuação e as cartoletas", rotulo: "Todo mundo começa com",
       numero: "60", pill: "C$ cartoletas", meta: "Moeda do jogo",
-      stats: [[String(TAM_TIME), "Jogadores"], ["×1,5", "Capitão"], [app.jogo ? `${DIAS_CURTOS[new Date(app.jogo.inicio).getDay()]} 0h` : "–", "Mercado abre"]]
+      stats: [[String(TAM_TIME), "Jogadores"], ["×1,5", "Capitão"], [app.jogo ? `${DIAS_CURTOS[new Date(app.jogo.inicio).getDay()]} ${String(new Date(new Date(app.jogo.inicio) - 36e5).getHours()).padStart(2, "0")}h${String(new Date(app.jogo.inicio).getMinutes()).padStart(2, "0")}` : "–", "Mercado fecha"]]
     })}
     ${subnavCartola("regras")}
     <section class="card fade" style="animation-delay:.05s">
@@ -1950,7 +1953,7 @@ function cardCartolaAdmin(){
         <div class="field" style="grid-column:1/-1"><span>Nome da liga</span>
           <form data-form="ligaNome" class="row"><input class="input" name="nome" maxlength="40" value="${esc(P.cartola_liga_nome || "")}" placeholder="Liga ${esc(P.nome)}" aria-label="Nome da liga"><button class="btn sm">Salvar</button></form></div>
       </div>
-      <p class="hint" style="margin-top:10px">O mercado abre sozinho à 0h do dia da pelada e fecha 1 hora antes do jogo. Entram no mercado os confirmados na lista e, como dúvida, os da lista de espera.</p>
+      <p class="hint" style="margin-top:10px">O mercado fica aberto a semana toda e fecha 1 hora antes do jogo. Reabre quando você encerra a rodada. Entram no mercado os confirmados na lista e, como dúvida, os da lista de espera.</p>
       ${!r ? `
         <p class="note" style="margin-top:14px">${encerradas().length ? "Nenhuma rodada aberta." : "O Cartola ainda não começou."} Antes, defina a posição dos jogadores no Elenco (Editar).</p>
         <button class="btn block" data-act="cartAbrir">Abrir rodada ${cart().rodadas.length + 1}</button>`
@@ -2142,7 +2145,7 @@ function passosGuia(){
     { ico: ico("estrela"), titulo: "Cartola da pelada",
       corpo: itens([
         "Monte seu time com <b>C$ 60</b> de saldo, escalando jogadores da própria pelada.",
-        "O <b>mercado abre no dia do jogo à meia-noite</b> e fecha na hora que a bola rola. Só dá pra escalar quem confirmou.",
+        "O <b>mercado fica aberto a semana toda</b> e fecha 1 hora antes da pelada. Só dá pra escalar quem confirmou.",
         "Os pontos contam depois que o presidente sobe as estatísticas. Dispute a liga com a galera." ]) + `<p class="hint">Só aparece se a sua pelada tiver o Cartola ligado.</p>` },
     { ico: ico("agenda"), titulo: pres ? "Pelada · você é o presidente" : "Pelada",
       corpo: pres ? itens([
@@ -3842,7 +3845,7 @@ const ACOES = {
   cartAbrir: () => run(async () => {
     const r = ok(await sb.rpc("cartola_abrir_rodada", { p: app.pelada.id }));
     await carregarCartola(); route(true);
-    aviso(`Rodada ${r.numero} aberta. O mercado abre à 0h do dia da pelada.`);
+    aviso(`Rodada ${r.numero} aberta. O mercado já está aberto e fecha 1h antes da pelada.`);
   }),
   cartScoutMenos: el => run(async () => {
     const r = rodadaAberta(), q = Number(el.dataset.qtd);
