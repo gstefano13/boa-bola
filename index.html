@@ -273,6 +273,12 @@ button.pill{font:inherit;font-size:12.5px;font-weight:500;border:0;cursor:pointe
 .list li.voto .who{flex:1 1 0;min-width:0}
 .list li.voto .notas{flex:1 1 100%;gap:6px}
 .list li.voto .notas button{flex:1;width:auto;height:38px;font-size:15px}
+/* presidente: ranking da galera */
+.rk-nota{display:flex;align-items:center;gap:8px;flex:none;width:120px}
+.rk-nota .trilho{flex:1;height:6px;border-radius:999px;background:var(--soft);border:1px solid var(--line);overflow:hidden}
+.rk-nota .trilho i{display:block;height:100%;background:var(--lime);border-radius:999px}
+.rk-nota b{font-family:var(--mono);font-size:13px;font-weight:600;min-width:28px;text-align:right}
+.rk-pos{font-family:var(--mono);font-size:12px;color:var(--ink-3);width:18px;flex:none;text-align:right}
 /* presidente: votos da semana */
 .list li.voto-adm{flex-wrap:wrap;row-gap:8px}
 .list li.voto-adm .who{flex:1 1 0;min-width:0}
@@ -505,7 +511,7 @@ const state = { periodo: "mes", stat: "gols", login: "codigo", loginEmail: "", l
   busca: "", filtro: "todas", verTodas: false, novaPelada: false, buscaUsu: "",
   buscaJog: "", filtroJog: "todos", verTodosJog: false, editando: null, addJogador: false, editMetrica: null,
   mercPos: "todos", mercBusca: "", mercOrdem: "media", mercTodos: false, pontRodada: null, faq: 0, renomear: false,
-  capitao: null, capitaoRodada: undefined, confirmEncerrar: false, editScout: null, ajustesAbertos: false, editarTime: false, formTime: null, modal: null, modalVisto: false, pos: null, verPartidas: false, menuPerfil: false, dashDias: 30, votosVistos: new Set(), guiaPasso: 0, votarIds: [], troca: null, votosAdm: {}, votosPartida: null, votosModo: "recebidos" };
+  capitao: null, capitaoRodada: undefined, confirmEncerrar: false, editScout: null, ajustesAbertos: false, editarTime: false, formTime: null, modal: null, modalVisto: false, pos: null, verPartidas: false, menuPerfil: false, dashDias: 30, votosVistos: new Set(), guiaPasso: 0, votarIds: [], troca: null, votosAdm: {}, votosPartida: null, votosModo: "recebidos", rankModo: "ranking" };
 
 /* ===================== REGRAS ===================== */
 const CHUTEIRAS = [
@@ -2462,6 +2468,7 @@ function renderPeladaAdmin(){
     ${subnavPelada("pelada")}
     ${cardLista()}
     ${cardVotosSemana()}
+    ${cardRankingGalera()}
     ${app.membro && !app.modoDev ? `<section class="card fade" style="animation-delay:.04s">
       <div class="eyebrow">Cartola e sorteio</div><div class="h2">Sua posição</div>
       ${seletorPosicao(true)}
@@ -2511,6 +2518,45 @@ function cardDados(){
         <button class="btn block">Salvar alterações</button>
       </form>
     </section>`;
+}
+
+/* presidente: média dos votos de cada jogador na janela do pote, em ranking ou por pote */
+function cardRankingGalera(){
+  const ids = janela(), sem = app.pelada.janela_semanas;
+  const media = new Map();
+  app.membros.forEach(m => {
+    const r = app.medias.filter(x => x.jogador_id === m.jogador_id && ids.has(x.partida_id));
+    const n = r.reduce((s, x) => s + Number(x.total_votos), 0);
+    if (n) media.set(m.jogador_id, { v: 7 - r.reduce((s, x) => s + Number(x.media) * Number(x.total_votos), 0) / n, n });
+  });
+  const nota = id => { const x = media.get(id); return x ? `<div class="rk-nota" title="${plural(x.n, "voto", "votos")}">
+      <span class="trilho"><i style="width:${Math.round((6 - x.v) / 5 * 92 + 8)}%"></i></span><b>${fmt(x.v)}</b></div>`
+    : `<span class="pill soft">Sem votos</span>`; };
+  const linha = (id, pos) => `<li>${pos ? `<span class="rk-pos">${pos}</span>` : ""}${avatarDe(id)}
+      <div class="who"><b>${esc(nomeDe(id))}</b><span>${media.has(id) ? plural(media.get(id).n, "voto", "votos") : "ninguém votou ainda"}</span></div>${nota(id)}</li>`;
+  const porNota = (a, b) => (media.has(a) ? media.get(a).v : 99) - (media.has(b) ? media.get(b).v : 99) || nomeDe(a).localeCompare(nomeDe(b), "pt-BR");
+  const todos = app.membros.map(m => m.jogador_id).sort(porNota);
+  let corpo;
+  if (state.rankModo === "ranking") {
+    let i = 0;
+    corpo = `<ul class="list">${todos.map(id => linha(id, media.has(id) ? ++i : "")).join("")}</ul>`;
+  } else {
+    const tabela = potes(), N = app.pelada.qtd_potes, grupos = [];
+    for (let k = 1; k <= N; k++) grupos.push([`Pote ${k}`, todos.filter(id => (tabela.get(id) || {}).pote === k)]);
+    grupos.push(["Sem pote", todos.filter(id => !tabela.get(id))]);
+    corpo = grupos.filter(([, l]) => l.length).map(([t, l]) => `
+      <div class="lista-sub">${t} <span>${plural(l.length, "jogador", "jogadores")}</span></div>
+      <ul class="list">${l.map(id => linha(id)).join("")}</ul>`).join("");
+  }
+  return `<section class="card fade" style="animation-delay:.04s">
+    <div class="eyebrow">Votação</div><div class="h2">Ranking da galera</div>
+    <p class="note">Média dos votos das últimas ${sem} semanas, no formato do pote: 1 = joga muito, 6 = joga pouco.</p>
+    <div class="seg full" style="margin:10px 0 4px">
+      <button class="${state.rankModo === "ranking" ? "on" : ""}" data-act="rankModo" data-valor="ranking">Ranking</button>
+      <button class="${state.rankModo === "potes" ? "on" : ""}" data-act="rankModo" data-valor="potes">Por pote</button>
+    </div>
+    ${corpo}
+  </section>`;
 }
 
 /* presidente: quem deu qual nota pra quem, por data de pelada */
@@ -3560,6 +3606,7 @@ const ACOES = {
   registrarPelada: () => { state.pos = { passo: "data" }; irProRegistro(); },
   verPartidas: () => { state.verPartidas = !state.verPartidas; route(true); },
   votosModo: el => { state.votosModo = el.dataset.valor; route(true); },
+  rankModo: el => { state.rankModo = el.dataset.valor; route(true); },
   posCorrigir: el => run(() => abrirPos(el.dataset.data)),
   posContinuar: () => run(() => abrirPos(rascunhoPos().data)),
   posDescartar: () => { state.pos = null; guardarPos(); route(true); aviso("Rascunho descartado"); },
