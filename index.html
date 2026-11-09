@@ -1284,6 +1284,8 @@ const precoDe = id => Number((membroDe(id) || {}).preco || 0);
 
 async function carregarCartola(){
   const p = app.pelada.id;
+  // semana sem pelada computada: o banco encerra a rodada velha ("não teve pelada") quando a lista seguinte abre
+  if (app.pelada.cartola_ativo && !app.fantasma) { try { await sb.rpc("cartola_virar_semana", { p }); } catch (e) { console.warn(e); } }
   const [regras, rodadas, times, escalacoes, scouts, resultados, pontosTime] = (await Promise.all([
     sb.from("cartola_scouts_regras").select("*"),
     tudo(() => sb.from("cartola_rodadas").select("*").eq("pelada_id", p).order("numero")),
