@@ -997,7 +997,9 @@ function cardPatrocinio(){
 }
 
 // Mesmo lugar do Slide 01 em toda aba: logo abaixo do primeiro card
+const MOSTRAR_PATROCINIO = false;   // box do patrocinador desligado em todas as abas; true volta a mostrar
 function inserirPatrocinio(){
+  if (!MOSTRAR_PATROCINIO) return;
   if (!app.user || view.querySelector(".sponsor") || !view.firstElementChild) return;
   // depois do primeiro card, sem separar as sub-abas do conteúdo delas
   let alvo = view.firstElementChild;
@@ -3454,7 +3456,7 @@ function renderAjustes(){
   view.innerHTML = `
     <section class="card fade">
       <div class="eyebrow">Patrocinador</div><div class="h2">Box do patrocinador</div>
-      <p class="note">Aparece no Início de todos os jogadores. Deixe o nome vazio pra esconder.</p>
+      <p class="note">O box está desligado no site no momento. Os dados ficam salvos pra quando ele voltar.</p>
       <form data-form="patrocinio">
         <label class="field"><span>Nome</span><input class="input" name="nome" value="${esc(p.nome || "")}" placeholder="Sua marca aqui"></label>
         <label class="field"><span>Descrição</span><input class="input" name="texto" value="${esc(p.texto || "")}" placeholder="Desconto exclusivo na pelada"></label>
