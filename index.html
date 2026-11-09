@@ -273,6 +273,12 @@ button.pill{font:inherit;font-size:12.5px;font-weight:500;border:0;cursor:pointe
 .list li.voto .who{flex:1 1 0;min-width:0}
 .list li.voto .notas{flex:1 1 100%;gap:6px}
 .list li.voto .notas button{flex:1;width:auto;height:38px;font-size:15px}
+/* presidente: votos da semana */
+.list li.voto-adm{flex-wrap:wrap;row-gap:8px}
+.list li.voto-adm .who{flex:1 1 0;min-width:0}
+.voto-chips{display:flex;flex-wrap:wrap;gap:6px;flex:1 1 100%}
+.voto-chips span{font-size:12px;padding:3px 9px;border-radius:999px;background:var(--soft);border:1px solid var(--line);color:var(--ink-2)}
+.voto-chips span b{color:var(--ink);font-weight:600}
 .toast{position:fixed;left:50%;top:16px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:999px;font-size:13px;z-index:30;box-shadow:var(--shadow);max-width:calc(100% - 32px);text-align:center}
 .toast:empty{display:none}
 
@@ -499,7 +505,7 @@ const state = { periodo: "mes", stat: "gols", login: "codigo", loginEmail: "", l
   busca: "", filtro: "todas", verTodas: false, novaPelada: false, buscaUsu: "",
   buscaJog: "", filtroJog: "todos", verTodosJog: false, editando: null, addJogador: false, editMetrica: null,
   mercPos: "todos", mercBusca: "", mercOrdem: "media", mercTodos: false, pontRodada: null, faq: 0, renomear: false,
-  capitao: null, capitaoRodada: undefined, confirmEncerrar: false, editScout: null, ajustesAbertos: false, editarTime: false, formTime: null, modal: null, modalVisto: false, pos: null, verPartidas: false, menuPerfil: false, dashDias: 30, votosVistos: new Set(), guiaPasso: 0, votarIds: [], troca: null };
+  capitao: null, capitaoRodada: undefined, confirmEncerrar: false, editScout: null, ajustesAbertos: false, editarTime: false, formTime: null, modal: null, modalVisto: false, pos: null, verPartidas: false, menuPerfil: false, dashDias: 30, votosVistos: new Set(), guiaPasso: 0, votarIds: [], troca: null, votosAdm: {}, votosPartida: null, votosModo: "recebidos" };
 
 /* ===================== REGRAS ===================== */
 const CHUTEIRAS = [
@@ -739,6 +745,7 @@ async function carregar(){
     sb.from("perfis_pendentes").select("jogador_id, email")   // só dev e presidente recebem
   ])).map(ok);
   Object.assign(app, { membros, partidas, gols, presencas, lances, medias, meusVotos });
+  state.votosAdm = {};
   await carregarLista();
   app.emails = new Map(pendentes.map(x => [x.jogador_id, x.email]));
   app.pelada = { ...pelada, papel: app.pelada.papel, sufixo: codPres.length ? codPres[0].sufixo : null };
@@ -773,6 +780,7 @@ async function atualizarVotacao(){
     tudo(() => sb.from("votos").select("partida_id, votado_id, nota").eq("pelada_id", p).eq("votante_id", app.user.id).order("id"))
   ])).map(ok);
   Object.assign(app, { partidas, meusVotos });
+  state.votosAdm = {};
   await carregarLista();
 }
 
@@ -2078,7 +2086,7 @@ function passosGuia(){
     { ico: ICO_VOTO, titulo: "Votação",
       corpo: itens([
         "Depois de confirmar, você avalia quem também vai <b>de 1 a 6, igual ao pote</b>: 1 = joga muito, 6 = joga pouco.",
-        "O voto é <b>secreto</b> e dá pra mudar até a lista fechar.",
+        "Só o presidente vê os votos, e dá pra mudar até a lista fechar.",
         "Quem confirmar depois de você aparece pra votar na próxima vez que abrir o app." ]) },
     { ico: ICO_TIMES, titulo: "Times da noite",
       corpo: itens([
@@ -2212,7 +2220,7 @@ function renderModal(){
     corpo = `${fechar}
       <div class="eyebrow">Votação · ${faltam ? `falta${faltam > 1 ? "m" : ""} ${faltam}` : "tudo votado ✓"}</div>
       <div class="h2">Avalie quem está na lista</div>
-      <p class="note">De 1 a 6, igual ao pote: <b>1 = joga muito</b>, 6 = joga pouco. Seu voto é secreto e dá pra mudar até a lista fechar.</p>
+      <p class="note">De 1 a 6, igual ao pote: <b>1 = joga muito</b>, 6 = joga pouco. Só o presidente vê seu voto, e dá pra mudar até a lista fechar.</p>
       ${prazo}
       ${ids.length ? `<ul class="list">${ids.map(vid => `
         <li class="voto">
@@ -2453,6 +2461,7 @@ function renderPeladaAdmin(){
     ${heroPelada()}
     ${subnavPelada("pelada")}
     ${cardLista()}
+    ${cardVotosSemana()}
     ${app.membro && !app.modoDev ? `<section class="card fade" style="animation-delay:.04s">
       <div class="eyebrow">Cartola e sorteio</div><div class="h2">Sua posição</div>
       ${seletorPosicao(true)}
@@ -2502,6 +2511,48 @@ function cardDados(){
         <button class="btn block">Salvar alterações</button>
       </form>
     </section>`;
+}
+
+/* presidente: quem deu qual nota pra quem, por data de pelada */
+function cardVotosSemana(){
+  const partidas = [...app.partidas].reverse(), atual = partidaDoJogo();
+  const head = extra => `<div class="card-head" style="margin-bottom:10px">
+      <div><div class="eyebrow">Votação</div><div class="h2">Votos da semana</div></div>${extra || ""}</div>`;
+  if (!partidas.length) return `<section class="card fade" style="animation-delay:.035s">${head()}<div class="empty">Nenhuma pelada com votação ainda.</div></section>`;
+  const pid = partidas.some(x => x.id === state.votosPartida) ? state.votosPartida : (atual || partidas[0]).id;
+  const votos = state.votosAdm[pid];
+  if (votos === undefined) { state.votosAdm[pid] = null; carregarVotosAdm(pid); }
+  const seletor = `<select class="select-pill" data-change="votosPartida" aria-label="Data da pelada">
+      ${partidas.map(x => `<option value="${x.id}" ${x.id === pid ? "selected" : ""}>${dataLonga(x.data)}${atual && x.id === atual.id ? " · atual" : ""}</option>`).join("")}</select>`;
+  let corpo;
+  if (!votos) corpo = `<div class="empty">Carregando votos…</div>`;
+  else if (!votos.length) corpo = `<div class="empty">Ninguém votou nessa pelada.</div>`;
+  else {
+    const pote = v => 7 - Number(v.nota), recebidos = state.votosModo === "recebidos";
+    const grupos = new Map();
+    votos.forEach(v => { const k = recebidos ? v.votado_id : v.votante_id; if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(v); });
+    const media = l => l.reduce((s, v) => s + pote(v), 0) / l.length;
+    const linhas = [...grupos].sort((a, b) => recebidos ? media(a[1]) - media(b[1]) : nomeDe(a[0]).localeCompare(nomeDe(b[0])));
+    const votantes = new Set(votos.map(v => v.votante_id)).size;
+    corpo = `<p class="note">${plural(votantes, "pessoa votou", "pessoas votaram")} · ${plural(votos.length, "voto", "votos")}. Nota no formato do pote: 1 = joga muito, 6 = joga pouco.</p>
+      <div class="seg full" style="margin:10px 0 4px">
+        <button class="${recebidos ? "on" : ""}" data-act="votosModo" data-valor="recebidos">Notas recebidas</button>
+        <button class="${recebidos ? "" : "on"}" data-act="votosModo" data-valor="dados">Votos de cada um</button>
+      </div>
+      <ul class="list">${linhas.map(([id, l]) => `
+        <li class="voto-adm">${avatarDe(id)}
+          <div class="who"><b>${esc(nomeDe(id))}</b><span>${recebidos ? `Média pote ${fmt(media(l))} · ${plural(l.length, "voto", "votos")}` : `Votou em ${plural(l.length, "jogador", "jogadores")}`}</span></div>
+          <div class="voto-chips">${[...l].sort((a, b) => pote(a) - pote(b)).map(v => `<span>${esc(nomeDe(recebidos ? v.votante_id : v.votado_id))} <b>${pote(v)}</b></span>`).join("")}</div>
+        </li>`).join("")}</ul>`;
+  }
+  return `<section class="card fade" style="animation-delay:.035s">${head(seletor)}${corpo}</section>`;
+}
+async function carregarVotosAdm(pid){
+  try {
+    const r = await tudo(() => sb.from("votos").select("votante_id, votado_id, nota").eq("partida_id", pid).order("id"));
+    state.votosAdm[pid] = r.data;
+  } catch (e) { delete state.votosAdm[pid]; console.error(e); aviso(traduz(e)); return; }
+  if (location.hash === "#pelada" || !location.hash) route(true);
 }
 
 function cardPotes(){
@@ -3508,6 +3559,7 @@ const ACOES = {
   // registrar pelada: data → separar times → registrar partidas
   registrarPelada: () => { state.pos = { passo: "data" }; irProRegistro(); },
   verPartidas: () => { state.verPartidas = !state.verPartidas; route(true); },
+  votosModo: el => { state.votosModo = el.dataset.valor; route(true); },
   posCorrigir: el => run(() => abrirPos(el.dataset.data)),
   posContinuar: () => run(() => abrirPos(rascunhoPos().data)),
   posDescartar: () => { state.pos = null; guardarPos(); route(true); aviso("Rascunho descartado"); },
@@ -3763,6 +3815,7 @@ const MUDANCAS = {
   peso: el => run(async () => { await salvarPelada({ peso_votacao: Number(el.value) }); }),
   mercOrdem: el => { state.mercOrdem = el.value; renderListaMerc(); },
   pontRodada: el => { state.pontRodada = el.value; route(true); },
+  votosPartida: el => { state.votosPartida = el.value; route(true); },
   cartPartida: el => run(async () => {
     ok(await sb.rpc("cartola_vincular_partida", { rodada: rodadaAberta().id, partida: el.value || null }));
     await carregarCartola(); route(true);
